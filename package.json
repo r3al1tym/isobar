@@ -1,0 +1,21 @@
+{
+  "name": "isobar",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "A Claude Code mod that draws the session's change as weather over a fixed map of the codebase.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/r3al1tym/isobar.git"
+  },
+  "scripts": {
+    "preview": "tsx scripts/preview.ts",
+    "validate": "claude plugin validate .",
+    "test": "claude plugin test ."
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

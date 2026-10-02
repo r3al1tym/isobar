@@ -1,0 +1,15 @@
+{
+  "name": "isobar",
+  "description": "isobar, a Claude Code mod: your change as weather over a fixed map of the codebase",
+  "owner": {
+    "name": "r3al1tym",
+    "url": "https://github.com/r3al1tym"
+  },
+  "plugins": [
+    {
+      "name": "isobar",
+      "source": "./",
+      "description": "isobar: where your change reaches, drawn as weather over a map of the codebase"
+    }
+  ]
+}

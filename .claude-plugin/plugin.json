@@ -1,0 +1,78 @@
+{
+  "name": "isobar",
+  "version": "0.2.0",
+  "description": "isobar, a Claude Code mod: the session's change as weather over a fixed map of the codebase. The storm sits on what Claude edited, rain falls on the code that uses what changed, the latest turn shows brightest, and an optional scope check flags edits nobody asked for.",
+  "author": {
+    "name": "r3al1tym",
+    "url": "https://github.com/r3al1tym"
+  },
+  "homepage": "https://github.com/r3al1tym/isobar",
+  "repository": "https://github.com/r3al1tym/isobar",
+  "license": "MIT",
+  "keywords": [
+    "blast-radius",
+    "impact",
+    "dependencies",
+    "code-review",
+    "map",
+    "visualization",
+    "mod"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "panel": {
+      "type": "string",
+      "title": "Pane",
+      "description": "auto opens the pane when the session's first edit lands (on a terminal wide enough to dock it); command opens it only on /isobar.",
+      "default": "auto",
+      "options": [
+        "auto",
+        "command"
+      ]
+    },
+    "scope": {
+      "type": "string",
+      "title": "Scope check",
+      "description": "on: after each turn that changes files, a small model compares the person's requests with the turn's diff and flags each change nobody asked for (UNASKED). It sends the requests and up to 400 diff lines to the scope model. off: no model call.",
+      "default": "off",
+      "options": [
+        "off",
+        "on"
+      ]
+    },
+    "scopeModel": {
+      "type": "string",
+      "title": "Scope model",
+      "description": "The model the scope check asks (an alias such as haiku, or a full id).",
+      "default": "haiku"
+    },
+    "mapModel": {
+      "type": "string",
+      "title": "Map model",
+      "description": "The model that names the basemap's regions, once per repository: empty for the model this session runs on, or an alias such as opus or sonnet, or a full id.",
+      "default": ""
+    },
+    "ground": {
+      "type": "string",
+      "title": "Ground",
+      "description": "What the map is printed on: paper is warm cream paper; night is the terminal's own near-black; auto follows the Claude Code theme (night on a dark theme, paper on a light one).",
+      "default": "paper",
+      "options": [
+        "paper",
+        "night",
+        "auto"
+      ]
+    },
+    "colors": {
+      "type": "string",
+      "title": "Colours",
+      "description": "auto reads how many colours Claude Code paints in this terminal; truecolor or 256 sets it. In 256 colours the map prints from xterm's own palette, on white paper.",
+      "default": "auto",
+      "options": [
+        "auto",
+        "truecolor",
+        "256"
+      ]
+    }
+  }
+}

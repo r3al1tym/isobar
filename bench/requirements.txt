@@ -1,0 +1,7 @@
+grimp==3.17
+# grimp locates flask.sansio by importing flask, so flask needs its own dependencies
+werkzeug
+jinja2
+itsdangerous
+click
+blinker
