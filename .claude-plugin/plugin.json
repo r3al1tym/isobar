@@ -1,7 +1,7 @@
 {
   "name": "isobar",
   "version": "0.2.0",
-  "description": "isobar, a Claude Code mod: the session's change as weather over a fixed map of the codebase. The storm sits on what Claude edited, rain falls on the code that uses what changed, the latest turn shows brightest, and an optional scope check flags edits nobody asked for.",
+  "description": "isobar, a Claude Code mod: the session's change as weather over a fixed map of the codebase, to read a complex change at a glance. The storm sits on what Claude edited, each changed region is captioned with what the change did there, rain falls on the code that uses what changed, the latest turn shows brightest, and an optional scope check flags edits nobody asked for.",
   "author": {
     "name": "r3al1tym",
     "url": "https://github.com/r3al1tym"

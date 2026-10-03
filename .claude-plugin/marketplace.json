@@ -9,7 +9,7 @@
     {
       "name": "isobar",
       "source": "./",
-      "description": "isobar: where your change reaches, drawn as weather over a map of the codebase"
+      "description": "isobar: what your change did across the codebase, at a glance, drawn as weather over a map of it"
     }
   ]
 }

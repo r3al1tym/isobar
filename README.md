@@ -4,9 +4,9 @@
 ![Claude Code mod](https://img.shields.io/badge/Claude%20Code-mod-d97757.svg)
 [![CI](https://github.com/r3al1tym/isobar/actions/workflows/ci.yml/badge.svg)](https://github.com/r3al1tym/isobar/actions/workflows/ci.yml)
 
-> **See what this session changed, what it reaches, and what you never asked for, on a map of your repo that never moves.**
+> **Ask for something big, then see at a glance what it changed across your product: where it landed, what it did there, and what else it reaches, on a map of your repo that never moves.**
 
-isobar is a [Claude Code](https://claude.com/claude-code) mod that docks a pane beside the conversation and draws the session's pending change as weather over a fixed map of your repository. It answers the two questions you carry before you read a diff: did Claude do what I asked, and what else does this touch? Across 300 recent commits in six public repositories, the median commit rains on 0 to 12 files, against 59 to 352 when every importer is marked, and still reaches 87 to 98 percent of the files a language server says use the change.
+isobar is a [Claude Code](https://claude.com/claude-code) mod that docks a pane beside the conversation and draws the session's change as weather over a fixed map of your repository. Ask for something high-level and the pane shows which parts of the product the work touched, captions what it did in each, and rains on the code that uses it. You understand a complex change before you read its diff, and a part you did not expect it to reach stands out at once. Across 300 recent commits in six public repositories, the median commit rains on 0 to 12 files, against 59 to 352 when every importer is marked, and still reaches 87 to 98 percent of the files a language server says use the change.
 
 ![Claude Code with the isobar pane docked on the right. Over two turns in Flask, Claude changed get_debug_flag in helpers.py and added a CHANGES.rst entry, then changed Flask.make_response in app.py. The latest edit burns brightest, its note reads new behaviour · 11 uses in 3 files, and a dotted track runs to test_basic.py two hops away. The first turn's edits have faded, and CHANGES.rst carries UNASKED because no request mentioned the changelog](docs/pane.png)
 
