@@ -33,18 +33,28 @@
     "scope": {
       "type": "string",
       "title": "Scope check",
-      "description": "on: after each turn that changes files, a small model compares the person's requests with the turn's diff and flags each change nobody asked for (UNASKED). It sends the requests and up to 400 diff lines to the scope model. off: no model call.",
+      "description": "on: after each turn that changes files, a small model compares the person's requests with the turn's diff and flags each change nobody asked for (UNASKED). It sends the requests and up to 400 diff lines to the small model. off: no model call.",
       "default": "off",
       "options": [
         "off",
         "on"
       ]
     },
-    "scopeModel": {
+    "gist": {
       "type": "string",
-      "title": "Scope model",
-      "description": "The model the scope check asks (an alias such as haiku, or a full id).",
-      "default": "haiku"
+      "title": "Gist",
+      "description": "on: once a turn that changed files ends (and when the pane shows a commit), a small model reads the diff of each changed region and captions what the change does there in a few words, under the region's name. It sends the changed paths with their line counts and touched declaration names, and up to 400 diff lines, to the small model; never your requests. off: no captions and no call.",
+      "default": "on",
+      "options": [
+        "on",
+        "off"
+      ]
+    },
+    "smallModel": {
+      "type": "string",
+      "title": "Small model",
+      "description": "The model the gist and the scope check ask (an alias such as sonnet or haiku, or a full id).",
+      "default": "sonnet"
     },
     "mapModel": {
       "type": "string",

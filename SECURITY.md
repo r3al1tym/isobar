@@ -13,7 +13,8 @@ isobar reads your repository through git and draws a pane. It never writes to th
 Every model call goes through Claude Code's own model access, so it follows whatever provider and policy your Claude Code uses.
 
 - **The basemap, once per repository.** Made with the session's own model, or `mapModel` when set. The prompt carries the repository's folder name and up to about 160 units: file and folder paths, their file and line counts, and up to four imported file names per file. It carries no file contents. The map is kept in Claude Code's plugin store, so later sessions make no call; `/isobar map` draws it again.
-- **The scope check, only when `scope` is `on`.** After each turn that changes files, one call to `scopeModel` (default `haiku`) carries your last four requests from the conversation (up to 1,500 characters each), the turn's changed paths with their line counts and touched declaration names, and up to 400 lines of their diff (60 per file). That is file contents: the same lines Claude itself just wrote and read. With `scope` off, the default, no call is made.
+- **The gist, unless `gist` is `off`.** Once a turn that changes files ends, and when the pane shows a commit, one call to `smallModel` (default `sonnet`) carries each changed region's name and blurb, its changed paths with their line counts and touched declaration names, and up to 400 lines of their diff, shared across the files (at least 12 per file). That is file contents: the same lines Claude itself just wrote and read. It never carries your requests. With `gist` off, no call is made.
+- **The scope check, only when `scope` is `on`.** After each turn that changes files, one call to `smallModel` (default `sonnet`) carries your last four requests from the conversation (up to 1,500 characters each), the turn's changed paths with their line counts and touched declaration names, and up to 400 lines of their diff (60 per file). That is file contents: the same lines Claude itself just wrote and read. With `scope` off, the default, no call is made.
 
 ## Threat model
 
@@ -21,6 +22,7 @@ A cloned repository controls its own file names, and those names reach the pane,
 
 - **The pane.** Every glyph goes through a printable-character filter before it is drawn, and the Raster takes code points, never escape sequences, so a file name cannot drive your terminal.
 - **The basemap prompt.** A file name could try to steer the model. Its answer is parsed as JSON, its names and blurbs are clipped to a few words, and its paths are only used to place files, so the worst outcome is an odd region name.
+- **The gist.** A diff could carry text that tries to steer the caption. Its answer is parsed as JSON, only regions it was shown are kept, and a caption is drawn as plain text clipped to its region: the worst outcome is a wrong or odd caption. Read it as a summary, and the diff as the record.
 - **The scope check.** A diff could carry text that tries to steer the check. Its answer is parsed as JSON, only paths it was shown are kept, and a flag only draws an `UNASKED` badge and a short note: the worst outcome is a wrong badge, or a missing one. Treat the badge as a prompt to look, never as proof that a change is safe.
 - **The `p` key.** It submits a question to Claude as you, naming the files on the far import chain. In a repository you do not trust, read the chain on the pane before pressing `p`: Claude then reads those files and may run their tests under your normal permission settings.
 

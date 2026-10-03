@@ -4,6 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { IsobarLayers } from '../types'
 import { basemapPrompt, completeRegions, finishBasemap, heuristicRegions, parseBasemapReply, unitsOf } from './engine/basemap'
 import { currentChange, gatherFacts, repoRoot } from './engine/git'
+import { gistLines, gistPrompt, parseGistReply } from './engine/gist'
 import { graphOf } from './engine/graph'
 import { excerptOf, parseScopeReply, scopePrompt } from './engine/scope'
 import { attribute, hashesOf, type Ledger } from './engine/session'
@@ -51,14 +52,24 @@ const sky = {
   ledgers: new Map<string, Ledger>(),
   /** repository → file → what the scope check said of it, and the content it said it of */
   unasked: new Map<string, Map<string, { why: string; hash: string }>>(),
+  /** repository → region → the gist's caption for the change there, and the change it was written of */
+  gists: new Map<string, Map<string, { what: string; key: string }>>(),
+  /** region → the change it carries now, as the gist keys it: each file's content, or the commit */
+  gistKeys: new Map<string, string>(),
+  /** the changes the gist has been asked of, so a reply that fails is never asked for again in a loop */
+  gistAsked: new Set<string>(),
+  /** whether the gist runs: after a turn, and on a commit shown while no turn runs */
+  isGistOn: true,
   /** the change read declaration by declaration, for the scope check */
   read: undefined as ChangeRead | undefined,
   /** prompts this session has started: the turn the next edit belongs to */
   turn: 0,
+  /** a turn is running: the gist waits for it to end, so it reads the turn whole */
+  isTurnRunning: false,
   /** a turn ended and the scope check runs once the refresh it awaits is done */
   isScopeDue: false,
-  /** the model the scope check asks */
-  scopeModel: 'haiku',
+  /** the small model the gist and the scope check ask */
+  smallModel: 'sonnet',
   isBusy: false,
   isAgain: false,
   timer: null as { cancel: () => void } | null,
@@ -70,7 +81,8 @@ export const register: Register = (on, options) => {
   // empty: the model the session runs on
   const mapModel = typeof options.mapModel === 'string' ? options.mapModel.trim() : ''
   const scope = options.scope === 'on' ? 'on' : 'off'
-  sky.scopeModel = typeof options.scopeModel === 'string' && options.scopeModel.trim() !== '' ? options.scopeModel.trim() : 'haiku'
+  sky.isGistOn = options.gist !== 'off'
+  sky.smallModel = typeof options.smallModel === 'string' && options.smallModel.trim() !== '' ? options.smallModel.trim() : 'sonnet'
   const ground = options.ground === 'night' || options.ground === 'auto' ? options.ground : 'paper'
   const colors = options.colors === 'truecolor' || options.colors === '256' ? options.colors : 'auto'
 
@@ -106,18 +118,21 @@ export const register: Register = (on, options) => {
       const before = sky.turn
 
       sky.turn++
+      sky.isTurnRunning = true
       void refresh($, mapModel, panel, false, before)
     }
     return started
   })
 
-  // the main loop's answer ends a turn: the scope check reads what it changed once the last refresh lands
+  // the main loop's end ends a turn: once the last refresh lands, the gist captions what changed, and on
+  // an answer the scope check reads what it changed
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
 
-    if (scope === 'on' && e.agentId === undefined && e.reason === 'answer' && sky.cwd !== '') {
-      sky.isScopeDue = true
-      void refresh($, mapModel, panel)
+    if (e.agentId === undefined && sky.cwd !== '') {
+      sky.isTurnRunning = false
+      if (scope === 'on' && e.reason === 'answer') sky.isScopeDue = true
+      if (scope === 'on' || sky.isGistOn) void refresh($, mapModel, panel)
     }
     return done
   })
@@ -178,9 +193,11 @@ export const register: Register = (on, options) => {
       const { Box, Markdown } = $.ui.resolve(e)
       const w = sky.weather
 
+      const captions = Object.entries(w?.regions ?? {}).flatMap(([id, r]) => (r.what === undefined ? [] : [`- ${sky.map?.regions.find(x => x.id === id)?.name ?? id}: ${r.what}`]))
+
       return (
         <Box flexDirection="column">
-          <Markdown text={[`**${sky.status ?? w?.headline ?? 'Reading the repository…'}**`, ...(w?.lines ?? [])].join('\n\n')} />
+          <Markdown text={[`**${sky.status ?? w?.headline ?? 'Reading the repository…'}**`, ...(captions.length > 0 ? [captions.join('\n')] : []), ...(w?.lines ?? [])].join('\n\n')} />
         </Box>
       )
     }
@@ -380,7 +397,15 @@ async function refresh($: Dollar, mapModel: string, panel: string, rebuild = fal
     // what the scope check said, while the file is as it was when it said it
     const flagged = new Map([...(sky.unasked.get(sky.root) ?? [])].filter(([path, u]) => hashes.get(path) === u.hash).map(([path, u]) => [path, u.why]))
 
-    sky.weather = weatherOf(sky.map, sky.facts, change.base, change.changes, sky.read, { ...(isEditing ? { turns: ledger.turns } : {}), unasked: flagged })
+    // the gist's captions, held while the turn that changes them runs
+    const held = sky.gists.get(sky.root) ?? new Map<string, { what: string; key: string }>()
+
+    sky.weather = weatherOf(sky.map, sky.facts, change.base, change.changes, sky.read, { ...(isEditing ? { turns: ledger.turns } : {}), unasked: flagged, gists: new Map([...held].map(([id, g]) => [id, g.what])) })
+    // each region's change as the gist keys it: its files' contents while editing, the commit once committed
+    const cells = sky.weather.cells
+    const sha = change.base.label.split(' ')[0] ?? ''
+
+    sky.gistKeys = new Map([...new Set(cells.map(c => c.region))].map(id => [id, isEditing ? cells.filter(c => c.region === id).map(c => `${c.path}:${hashes.get(c.path) ?? ''}`).sort().join('|') : `commit:${sha}`]))
     if (panel === 'auto' && isEditing && !(await read($, openedAtom))) await openPane($)
   } catch (err) {
     sky.status = `Isobar could not read the repository: ${err instanceof Error ? err.message : String(err)}`
@@ -390,10 +415,63 @@ async function refresh($: Dollar, mapModel: string, panel: string, rebuild = fal
     if (sky.isAgain) {
       sky.isAgain = false
       void refresh($, mapModel, panel)
-    } else if (sky.isScopeDue) {
+    } else {
+      const isScopeDue = sky.isScopeDue
+      const regions = staleGists()
+
       sky.isScopeDue = false
-      void checkScope($, mapModel, panel)
+      if (isScopeDue || regions.length > 0) void readTurn($, mapModel, panel, isScopeDue, regions)
     }
+  }
+}
+
+/** The regions whose change the gist has not captioned yet; none while a turn runs. */
+function staleGists(): string[] {
+  const root = sky.root
+
+  if (!sky.isGistOn || sky.isTurnRunning || root === null || sky.weather === null) return []
+  const held = sky.gists.get(root)
+
+  return [...sky.gistKeys].filter(([id, key]) => held?.get(id)?.key !== key && !sky.gistAsked.has(`${root}:${id}@${key}`)).map(([id]) => id)
+}
+
+/** After a turn: the gist and the scope check read it side by side, and the pane redraws once with both. */
+async function readTurn($: Dollar, mapModel: string, panel: string, isScopeDue: boolean, regions: readonly string[]) {
+  const [flagged, captioned] = await Promise.all([isScopeDue ? checkScope($) : false, regions.length > 0 ? writeGists($, regions) : false])
+
+  if (flagged || captioned) await refresh($, mapModel, panel)
+}
+
+/**
+ * The gist: a small model reads the diff of each region the change sits in and captions what it
+ * does there in a few words, so the map says what changed as well as where. A caption holds until
+ * its region's change changes.
+ */
+async function writeGists($: Dollar, regions: readonly string[]): Promise<boolean> {
+  const root = sky.root
+  const w = sky.weather
+  const map = sky.map
+
+  if (root === null || w === null || map === null) return false
+  const keys = new Map(regions.map(id => [id, sky.gistKeys.get(id) ?? '']))
+
+  for (const [id, key] of keys) sky.gistAsked.add(`${root}:${id}@${key}`)
+  const cells = w.cells.filter(c => keys.has(c.region))
+
+  try {
+    const excerpts = await excerptOf(runOf($), root, cells.map(c => c.path), w.base.kind === 'commit' ? ['HEAD~1', 'HEAD'] : ['HEAD'], gistLines(cells.length))
+    const reply = await $.model.complete({ model: sky.smallModel, prompt: gistPrompt(map, cells, excerpts), maxTokens: 1500, effort: 'low', timeoutMs: 90_000 })
+    const gists = reply.isAnswered ? parseGistReply(reply.text, new Set(keys.keys())) : null
+
+    if (gists === null || gists.size === 0) return false
+    const held = sky.gists.get(root) ?? new Map<string, { what: string; key: string }>()
+
+    for (const [id, what] of gists) held.set(id, { what, key: keys.get(id) ?? '' })
+    sky.gists.set(root, held)
+    return true
+  } catch {
+    // the gist is a caption: when it cannot run, the map stays as it was
+    return false
   }
 }
 
@@ -401,31 +479,32 @@ async function refresh($: Dollar, mapModel: string, panel: string, rebuild = fal
  * The scope check: after a turn that changed files, a small model reads the person's requests and
  * the turn's diff and names the changes nobody asked for. A flag holds until the file changes again.
  */
-async function checkScope($: Dollar, mapModel: string, panel: string) {
+async function checkScope($: Dollar): Promise<boolean> {
   const root = sky.root
   const w = sky.weather
   const ledger = root === null ? undefined : sky.ledgers.get(root)
 
-  if (root === null || w === null || ledger === undefined) return
+  if (root === null || w === null || ledger === undefined) return false
   const cells = w.cells.filter(c => c.turn === sky.turn)
 
-  if (cells.length === 0) return
+  if (cells.length === 0) return false
   try {
     const asks = (await $.session.messages()).filter(m => m.role === 'user' && m.text.trim() !== '' && (m.toolResults?.length ?? 0) === 0).map(m => m.text.trim()).slice(-4)
     const excerpts = await excerptOf(runOf($), root, cells.map(c => c.path))
-    const reply = await $.model.complete({ model: sky.scopeModel, prompt: scopePrompt(asks, cells, excerpts), maxTokens: 1500, effort: 'low', timeoutMs: 90_000 })
+    const reply = await $.model.complete({ model: sky.smallModel, prompt: scopePrompt(asks, cells, excerpts), maxTokens: 1500, effort: 'low', timeoutMs: 90_000 })
     const flags = reply.isAnswered ? parseScopeReply(reply.text, new Set(cells.map(c => c.path))) : null
 
-    if (flags === null) return
+    if (flags === null) return false
     const kept = sky.unasked.get(root) ?? new Map<string, { why: string; hash: string }>()
 
     // the turn's files are judged afresh: a flag the model dropped is dropped
     for (const c of cells) kept.delete(c.path)
     for (const [path, why] of flags) kept.set(path, { why, hash: ledger.hashes.get(path) ?? '' })
     sky.unasked.set(root, kept)
-    if (flags.size > 0) await refresh($, mapModel, panel)
+    return true
   } catch {
     // the check is advice: when it cannot run, the map stays as it was
+    return false
   }
 }
 

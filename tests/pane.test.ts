@@ -20,23 +20,25 @@ const TOGGLE = { command: 'isobar', args: '', origin: { kind: 'composer' }, pres
 /**
  * The engine beneath the plugin: git from the fixture repo, a model that names the map, and a record of what was asked.
  * `started` is the environment Claude Code started in, as /proc gives it; absent, there is no /proc to read.
- * `repo` is how the fixture repo answers git; `scope` what the scope check's model replies.
+ * `repo` is how the fixture repo answers git; `scope` what the scope check's model replies, `gist` what the gist's does.
  */
-function world(on: On, started = '', repo: Repo = {}, scope = '{"unasked": []}') {
-  const seen = { opened: [] as string[], prompts: [] as string[], commands: [] as string[], models: 0, scoped: [] as string[], mapModels: [] as string[], stored: new Map<string, unknown>(), open: new Set<string>() }
+function world(on: On, started = '', repo: Repo = {}, scope = '{"unasked": []}', gist = '{"regions": []}') {
+  const seen = { opened: [] as string[], prompts: [] as string[], commands: [] as string[], models: 0, scoped: [] as string[], gists: [] as string[], mapModels: [] as string[], stored: new Map<string, unknown>(), open: new Set<string>() }
 
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('ui.render', () => ({ type: 'Text', children: [''] }))
   on('process.run', ($, e) => ({ value: { exitCode: 0, stdout: e.argv[0] === 'sh' ? started : gitAnswer(e.argv, repo), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
   on('model.complete', ($, e) => {
     const isScope = e.prompt.includes("coding agent's edits")
+    const isGist = e.prompt.includes('captions on a map of a codebase')
 
     if (isScope) seen.scoped.push(e.prompt)
+    else if (isGist) seen.gists.push(e.prompt)
     else {
       seen.models++
       seen.mapModels.push(e.model)
     }
-    return { value: { isAnswered: true, text: isScope ? scope : MODEL_REPLY, usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } } as never
+    return { value: { isAnswered: true, text: isScope ? scope : isGist ? gist : MODEL_REPLY, usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } } as never
   })
   on('session.model', () => ({ value: 'claude-sonnet-5-5' }))
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
@@ -300,7 +302,38 @@ describe('the pane', () => {
     await ui.unmount()
   })
 
-  test('with the scope check off, no turn asks a model', async ($, on) => {
+  test('the gist captions each changed region under its name from the diff, once per change, never with the requests', async ($, on) => {
+    const repo: Repo = { read: true, hash: 'before' }
+    const seen = world(on, '', repo, undefined, '{"regions": [{"id": "core", "what": "Adds two instead of one."}]}')
+
+    on('tool.call', () => ({ result: 'done' }) as never)
+    const clock = mock.clock(on)
+
+    await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+    await settle()
+    // the tree was dirty when the session began: with no turn running, the gist captions it at once
+    expect(seen.gists.length).toBe(1)
+    expect(seen.gists[0]).toContain('<region id="core"')
+    expect(seen.gists[0]).not.toContain('Make util add two instead of one')
+    const ui = await $.ui.mount({ plugin: PLUGIN, ...PANE })
+
+    expect(textOf(String((await ui.find({ type: 'Raster' }))?.props.cells), 92).join('\n')).toContain('adds two instead of one')
+    await ui.unmount()
+
+    // a turn that edits the region waits for its end, then asks once more of the new change
+    await $.turn.start({ text: 'Make util add three', turnId: 't1' })
+    await settle()
+    repo.hash = 'after'
+    await $.tool.call({ tool: 'Edit', file_path: '/work/src/util.ts', old_string: 'a', new_string: 'b' } as never)
+    await clock.advance(600)
+    await settle()
+    expect(seen.gists.length).toBe(1)
+    await $.turn.complete({ answer: 'Done.', durationMs: 10, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle()
+    expect(seen.gists.length).toBe(2)
+  })
+
+  test('with the gist and the scope check off, no turn asks a model', { options: { gist: 'off' } }, async ($, on) => {
     const seen = world(on, '', { read: true })
 
     mock.clock(on)
@@ -310,6 +343,7 @@ describe('the pane', () => {
     await $.turn.complete({ answer: 'Done.', durationMs: 10, isAborted: false, turnId: 't1', reason: 'answer' })
     await settle()
     expect(seen.scoped).toEqual([])
+    expect(seen.gists).toEqual([])
   })
 
   test('a headless session does no work', async ($, on) => {

@@ -51,6 +51,22 @@ export const fit = (s: string, width: number): string => (s.length <= width ? s 
 
 const short = (p: string) => p.split('/').pop() ?? p
 
+/** Each path's shortest tail no other path among `paths` shares: `app.py` alone, `sansio/app.py` beside `flask/app.py`. */
+export function labelsOf(paths: Iterable<string>): (path: string) => string {
+  const all = [...new Set(paths)]
+  const tail = (p: string, n: number) => p.split('/').slice(-n).join('/')
+  const out = new Map<string, string>()
+
+  for (const p of all) {
+    const depth = p.split('/').length
+    let n = 1
+
+    while (n < depth && all.some(q => q !== p && tail(q, n) === tail(p, n))) n++
+    out.set(p, tail(p, n))
+  }
+  return p => out.get(p) ?? short(p)
+}
+
 /**
  * The pane as a framed chart: a muted title above, the map inside a hairline frame with
  * ample margins, one centred legend line below. On the map, a region the weather reached
@@ -288,6 +304,12 @@ function names(grid: Sheet, layout: Layout, weather: Weather | null, layers: Lay
       write(grid, x, y, b.text, b.chip.fg, b.chip.bg)
       x += b.text.length + 1
     }
+    // what the change does here, in the gist's words, under the name and its badges: three lines at most,
+    // and a row of the region kept clear below it
+    const left = rect.y + rect.h - 2 - y
+    const what = isChanged && wx?.what !== undefined && left >= 1 ? wrap(wx.what, room, Math.min(3, left)) : []
+
+    block(grid, rect.x + 1, y + 1, what, g.muted)
   }
 }
 
@@ -295,19 +317,29 @@ function names(grid: Sheet, layout: Layout, weather: Weather | null, layers: Lay
  * Text over the weather: one ink for the whole run, chosen by the ground under it, never a
  * glow. On light rain the ink steps one shade darker; on the storm it turns to paper.
  */
-function text(grid: Sheet, x: number, y: number, s: string, fg: number) {
+function text(grid: Sheet, x: number, y: number, s: string, fg: number, under?: number) {
   const chars = [...s]
   const grounds = chars.map((_, i) => groundOf(grid, x + i, y))
-  const mean = grounds.reduce((sum, g) => sum + luma(g), 0) / Math.max(1, grounds.length)
+  // `under` is the ground of a whole block the run belongs to, so its lines share one ink
+  const mean = under ?? grounds.reduce((sum, g) => sum + luma(g), 0) / Math.max(1, grounds.length)
   const g = grid.inks
   // on rain each ink steps one further from the ground, red inks to their rain red, so a note never
   // sinks into its own colour; on the storm every ink turns to the storm's own
   const stepped = fg === g.faint ? g.muted : fg === g.muted ? g.ink : fg === g.red || fg === g.history ? g.redOnRain : fg
   const onStorm = g.isNight ? mean > 150 : mean < 140
-  const onRain = g.isNight ? mean > 60 : mean < 215
+  // muted ink holds 3:1 on paper's lighter rain, so it steps only once the rain deepens past it
+  const onRain = g.isNight ? mean > 60 : mean < (fg === g.muted ? 195 : 215)
   const ink = onStorm ? g.onStorm : onRain ? stepped : fg
 
   chars.forEach((ch, i) => put(grid, x + i, y, { glyph: ch, fg: ink, bg: grounds[i] }))
+}
+
+/** Lines of text set as one run: one ink for all of them, chosen by the ground under the whole block. */
+function block(grid: Sheet, x: number, y: number, lines: readonly string[], fg: number) {
+  const cells = lines.flatMap((l, k) => [...l].map((_, i) => groundOf(grid, x + i, y + k)))
+  const mean = cells.reduce((sum, g) => sum + luma(g), 0) / Math.max(1, cells.length)
+
+  lines.forEach((l, k) => text(grid, x, y + k, l, fg, mean))
 }
 
 // braille dot bits by [column][row] inside a cell (2 × 4 dots)
@@ -405,21 +437,23 @@ function notes(grid: Sheet, layout: Layout, field: Field, weather: Weather, laye
   const cellOf = (region: string) => layout.cells.find(c => c.region.id === region)?.rect ?? { x: 0, y: 0, w: layout.cols, h: layout.rows }
   const changed = new Map(weather.cells.map(c => [c.path, c]))
   const isUnasked = (path: string) => Number(changed.get(path)?.unasked !== undefined)
+  // a file is named by as much of its path as tells it from the others on the pane
+  const label = labelsOf([...weather.cells.map(c => c.path), ...weather.offshoots.slice(0, 1).map(o => o.path), ...field.rings.map(r => r.path)])
 
   // the edits nobody asked for come first, then the riskiest of the latest turn
   for (const e of [...field.eyes].sort((a, b) => isUnasked(b.path) - isUnasked(a.path)).slice(0, 2)) {
     const c = changed.get(e.path)
 
-    if (c !== undefined) noteNear(grid, noteOf(grid, c), Math.floor(e.x) + 2, Math.floor(e.y / 2), cellOf(c.region), 12, true)
+    if (c !== undefined) noteNear(grid, noteOf(grid, c, label), Math.floor(e.x) + 2, Math.floor(e.y / 2), cellOf(c.region), 12, true)
   }
   if (layers.impact) {
     for (const o of weather.offshoots.slice(0, 1)) {
       const p = layout.points.get(o.path)
 
-      if (p !== undefined) noteNear(grid, [{ text: `${short(o.path)} · ${o.hop} ${o.hop === 1 ? 'hop' : 'hops'}`, fg: grid.inks.red }], Math.round(p.x) + 2, Math.floor(p.y / 2), cellOf(o.region), 4, true)
+      if (p !== undefined) noteNear(grid, [{ text: `${label(o.path)} · ${o.hop} ${o.hop === 1 ? 'hop' : 'hops'}`, fg: grid.inks.red }], Math.round(p.x) + 2, Math.floor(p.y / 2), cellOf(o.region), 4, true)
     }
   }
-  for (const r of field.rings) noteNear(grid, [{ text: short(r.path), fg: grid.inks.history }], Math.round(r.x) - 4, Math.floor(r.y / 2) + 3, cellOf(r.region), 10, false)
+  for (const r of field.rings) noteNear(grid, [{ text: label(r.path), fg: grid.inks.history }], Math.round(r.x) - 4, Math.floor(r.y / 2) + 3, cellOf(r.region), 10, false)
 }
 
 /**
@@ -427,11 +461,11 @@ function notes(grid: Sheet, layout: Layout, field: Field, weather: Weather, laye
  * when it reaches some and no test moved with it; and why nobody asked for it, when the scope
  * check says so. The region's badges carry the line counts.
  */
-function noteOf(grid: Sheet, c: Cell): { text: string; fg: number }[] {
+function noteOf(grid: Sheet, c: Cell, label: (path: string) => string = short): { text: string; fg: number }[] {
   const g = grid.inks
   const named = [...new Set(c.touches.filter(t => t.kind !== 'comments').map(t => t.name))]
   const what = named.length === 0 ? '' : named.length === 1 ? ` · ${named[0]}` : ` · ${named[0]} +${named.length - 1}`
-  const lines = [{ text: c.isDeleted ? `${short(c.path)} deleted` : `${short(c.path)}${what}`, fg: g.ink }]
+  const lines = [{ text: c.isDeleted ? `${label(c.path)} deleted` : `${label(c.path)}${what}`, fg: g.ink }]
   const reach = reachOfCell(c)
   const how = c.isTest
     ? ''

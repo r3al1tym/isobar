@@ -1,6 +1,6 @@
 import { regionFinder } from './basemap'
 import { chainOf, dependentsOf, expectedOf, graphOf, isTest, reachOf, type Expected, type Reach } from './graph'
-import type { ChangeRead, Kind, Touch } from './symbols'
+import { names, type ChangeRead, type Kind, type Touch } from './symbols'
 import type { Base, Basemap, Change, Facts } from './types'
 
 /** A changed file as the storm reads it. */
@@ -27,8 +27,11 @@ export type Cell = Change & {
 /** A file the change reaches: `uses` lines name what changed there, null when the edit is read file-wide; `of` is that edit. */
 export type ReachRow = Reach & { region: string; uses: number | null; of: string }
 
-/** What a session adds to a change: when each file last changed, and what the scope check flagged. */
-export type Session = { turns?: ReadonlyMap<string, number>; unasked?: ReadonlyMap<string, string> }
+/**
+ * What a session adds to a change: when each file last changed, what the scope check flagged, and
+ * the gist's caption for each region the change sits in.
+ */
+export type Session = { turns?: ReadonlyMap<string, number>; unasked?: ReadonlyMap<string, string>; gists?: ReadonlyMap<string, string> }
 
 /** Rings need a file to change with these this many times more often than it changes at all (bench/history.mts). */
 export const MIN_LIFT = 4
@@ -51,6 +54,8 @@ export type RegionWeather = {
   files: number
   reached: number
   tags: string[]
+  /** what the change does here, in the gist's few words */
+  what?: string
 }
 
 export type Weather = {
@@ -98,6 +103,15 @@ export function weatherOf(map: Basemap, facts: Facts, base: Base, changes: reado
   const inChange = new Set(changedPaths)
   const changedTests = changes.filter(c => isTest(c.path)).map(c => c.path)
   const testedBy = new Set(changedTests.flatMap(t => [t, ...chainTargets(graph.out, t, 2)]))
+  // a test written against an edit names it: the declarations the edit touched, or a name it brought
+  // into its file (a config key, a new helper), on the lines the change added to the test
+  const testLines = changedTests.map(t => (read?.added.get(t) ?? []).join('\n')).filter(t => t !== '')
+  const isNamedByTest = (path: string) => {
+    const touched = (read?.shapes.get(path)?.touches ?? []).map(t => t.name).filter(n => n.length >= 4 && !/^__\w+__$/.test(n))
+    const words = [...new Set([...touched, ...(read?.coined.get(path) ?? [])])]
+
+    return words.length > 0 && testLines.some(t => names(t, words))
+  }
   const turns = changes.map(c => session.turns?.get(c.path)).filter((t): t is number => t !== undefined)
   const latest = turns.length === 0 ? undefined : Math.max(...turns)
 
@@ -124,7 +138,7 @@ export function weatherOf(map: Basemap, facts: Facts, base: Base, changes: reado
     const users = kind === 'file' ? null : rows.filter(r => (r.uses ?? 0) > 0).length
     const test = isTest(c.path)
     const stem = short(c.path).replace(/\.[^.]+$/, '')
-    const isTested = test || testedBy.has(c.path) || changedTests.some(t => short(t).includes(stem))
+    const isTested = test || testedBy.has(c.path) || changedTests.some(t => short(t).includes(stem)) || isNamedByTest(c.path)
     const size = clamp(Math.log2(1 + c.added + c.deleted) / Math.log2(1 + 400))
     // how far it spreads: its users when read by declaration, every dependent when read whole
     const spread = kind === 'comments' || kind === 'imports' ? 0 : users ?? dependents
@@ -190,6 +204,9 @@ export function weatherOf(map: Basemap, facts: Facts, base: Base, changes: reado
     if (here.some(owesTest)) w.tags.push('NO TESTS')
     if (here.some(c => c.unasked !== undefined)) w.tags.push('UNASKED')
     if (w.files === 0 && w.history > 0) w.tags.push('EXPECTED')
+    const what = w.files > 0 ? session.gists?.get(id) : undefined
+
+    if (what !== undefined) w.what = what
   }
 
   const { headline, lines } = forecast(map, cells, reachRows, offshoots, expected)

@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { finishBasemap, parseBasemapReply, unitsOf } from '../hooks/engine/basemap'
+import { gistPrompt, parseGistReply } from '../hooks/engine/gist'
 import { parseScopeReply } from '../hooks/engine/scope'
 import { attribute } from '../hooks/engine/session'
 import { hunksOf, namesMember, readChange, shapeOf, textsOf } from '../hooks/engine/symbols'
 import type { Facts, Run } from '../hooks/engine/types'
 import { weatherOf } from '../hooks/engine/weather'
+import { labelsOf } from '../hooks/render/sheet'
 import { FACTS, MODEL_REPLY } from './fixtures'
 
 /** `lines` with line `n` (1-based) replaced. */
@@ -134,6 +136,26 @@ describe('users', () => {
 
     expect(read.shapes.get('a.ts')?.kind).toBe('body')
     expect(read.users.filter(u => u.uses > 0).map(u => [u.path, u.uses])).toEqual([['b.ts', 1], ['d.ts', 1]])
+    expect(read.added.get('a.ts')).toEqual(['  return a + 2'])
+  })
+
+  test('a name is coined when the added lines bring an identifier the file never had, in code or in a string', async () => {
+    const coin: Run = async argv => {
+      const args = argv.slice(3).join(' ')
+      const stdout = args.includes('diff -U0')
+        ? 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -2 +2 @@\n-  return a + 1\n+  return a + cfg["MAX_RETRY_COUNT"] + helperFn(a) + total\n'
+        : args.startsWith('grep -z -n -I -e  HEAD')
+          ? rows(['export function foo(a: number) {', '  return a + 1', '}  // helperFn'], 'HEAD:')
+          : args.startsWith('grep -z -n -I -e  --')
+            ? rows(['export function foo(a: number) {', '  return a + cfg["MAX_RETRY_COUNT"] + helperFn(a) + total', '}  // helperFn'])
+            : ''
+
+      return { exitCode: 0, stdout }
+    }
+    const read = await readChange(coin, '/r', facts, [{ path: 'a.ts', added: 1, deleted: 1, isNew: false, isDeleted: false }], { from: 'HEAD' })
+
+    // helperFn was there before, and total has no identifier's shape
+    expect(read.coined.get('a.ts')).toEqual(['MAX_RETRY_COUNT'])
   })
 })
 
@@ -153,6 +175,8 @@ describe('reach by declaration', () => {
     const read = {
       shapes: new Map([['src/util.ts', { path: 'src/util.ts', kind: 'body' as const, touches: [{ name: 'util', kind: 'body' as const }], words: ['util'], members: [] }]]),
       users: [{ path: 'src/core.ts', hop: 1, via: 'src/util.ts', uses: 2, of: 'src/util.ts' }],
+      added: new Map(),
+      coined: new Map(),
     }
     const w = weatherOf(map, FACTS, base, change, read)
 
@@ -162,11 +186,25 @@ describe('reach by declaration', () => {
   })
 
   test('a comment-only change stays dry and needs no test', () => {
-    const read = { shapes: new Map([['src/util.ts', { path: 'src/util.ts', kind: 'comments' as const, touches: [], words: [], members: [] }]]), users: [] }
+    const read = { shapes: new Map([['src/util.ts', { path: 'src/util.ts', kind: 'comments' as const, touches: [], words: [], members: [] }]]), users: [], added: new Map(), coined: new Map() }
     const w = weatherOf(map, FACTS, base, change, read)
 
     expect(w.reach).toEqual([])
     expect(w.regions.core?.tags).toEqual(['CHANGED +1 −1'])
+  })
+
+  test('a changed test that names what an edit coined covers it, wherever the test sits; one that names nothing of it does not', () => {
+    // the test imports core, never far: only its own new lines tie it to far's edit
+    const two = [{ path: 'src/far.ts', added: 3, deleted: 0, isNew: false, isDeleted: false }, { path: 'test/core.test.ts', added: 4, deleted: 0, isNew: false, isDeleted: false }]
+    const shapes = new Map([
+      ['src/far.ts', { path: 'src/far.ts', kind: 'body' as const, touches: [{ name: 'far', kind: 'body' as const }], words: ['far'], members: [] }],
+      ['test/core.test.ts', { path: 'test/core.test.ts', kind: 'body' as const, touches: [], words: [], members: [] }],
+    ])
+    const readWith = (test: string[]) => ({ shapes, users: [], added: new Map([['test/core.test.ts', test]]), coined: new Map([['src/far.ts', ['FAR_LIMIT']]]) })
+    const far = (test: string[]) => weatherOf(map, FACTS, base, two, readWith(test)).cells.find(c => c.path === 'src/far.ts')!
+
+    expect(far(["  setConfig({ FAR_LIMIT: 2 })"]).isTested).toBe(true)
+    expect(far(["  expect(core(1)).toBe(2)"]).isTested).toBe(false)
   })
 
   test('without a read every importer is reached, as far as three hops', () => {
@@ -201,5 +239,27 @@ describe('the session', () => {
     expect(parseScopeReply('{"unasked": []}', shown)?.size).toBe(0)
     expect(parseScopeReply('{"unasked": [{"path": "a.ts", "why": "Changelog entry not requested"}]}', shown)?.get('a.ts')).toBe('changelog entry')
     expect(parseScopeReply('every change was asked for', shown)).toBe(null)
+  })
+
+  test('the gist asks of each region from its diff alone, and keeps only the regions it was shown', () => {
+    const map = finishBasemap('demo', FACTS, parseBasemapReply(MODEL_REPLY, unitsOf(FACTS))!, 'model', '2026-10-02T00:00:00Z')
+    const w = weatherOf(map, FACTS, { kind: 'uncommitted', label: 'uncommitted' }, [{ path: 'src/util.ts', added: 5, deleted: 1, isNew: false, isDeleted: false }])
+    const prompt = gistPrompt(map, w.cells, new Map([['src/util.ts', '+  return a + 2']]))
+    const id = w.cells[0]!.region
+
+    expect(prompt).toContain(`<region id="${id}"`)
+    expect(prompt).toContain('src/util.ts (+5 −1)')
+    expect(prompt).toContain('+  return a + 2')
+    const shown = new Set([id])
+
+    expect([...parseGistReply(`{"regions": [{"id": "${id}", "what": "Adds two instead of one."}, {"id": "elsewhere", "what": "x"}]}`, shown)!]).toEqual([[id, 'adds two instead of one']])
+    expect(parseGistReply('it adds two', shown)).toBe(null)
+    expect(weatherOf(map, FACTS, { kind: 'uncommitted', label: 'uncommitted' }, [{ path: 'src/util.ts', added: 5, deleted: 1, isNew: false, isDeleted: false }], undefined, { gists: new Map([[id, 'adds two']]) }).regions[id]?.what).toBe('adds two')
+  })
+
+  test('a file is labelled by as much of its path as tells it from the others on the pane', () => {
+    const label = labelsOf(['src/flask/app.py', 'src/flask/sansio/app.py', 'src/flask/helpers.py', 'app.py'])
+
+    expect(['src/flask/app.py', 'src/flask/sansio/app.py', 'src/flask/helpers.py', 'app.py'].map(label)).toEqual(['flask/app.py', 'sansio/app.py', 'helpers.py', 'app.py'])
   })
 })

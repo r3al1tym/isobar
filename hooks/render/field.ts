@@ -53,13 +53,20 @@ export function fieldOf(layout: Layout, weather: Weather | null, layers: Layers,
   const faded = new Set(weather.cells.filter(c => !c.isLatest).map(c => c.path))
 
   if (layers.risk) {
+    // a region carrying many edits pools them into one system: each burns and spreads a little less, so
+    // the storm keeps its eyes and bands instead of filling the region flat
+    const many = new Map<string, number>()
+
+    for (const c of weather.cells) many.set(c.region, (many.get(c.region) ?? 0) + 1)
     for (const c of weather.cells) {
       const p = pointOf(c.path, c.region)
       const I = faded.has(c.path) ? c.risk * 0.4 : c.risk
       const into = c.path === riskiest ? lead : storm
+      const crowd = c.path === riskiest ? 1 : 1 / Math.sqrt(Math.max(1, (many.get(c.region) ?? 1) / 2))
+      const S = 0.55 + 0.45 * crowd
 
-      cloud(into, rnd, p.x, p.y, 3 + 10 * I, 2.4 + 7 * I, Math.round(14 * (0.6 + 0.8 * I)), 0.45 + 0.95 * I)
-      cloud(into, rnd, p.x + 1.5 + 3 * I, p.y - 1 - 1.5 * I, 2 + 5 * I, 1.6 + 3.5 * I, Math.round(6 * (0.5 + I)), 0.14 + 0.22 * I)
+      cloud(into, rnd, p.x, p.y, (3 + 10 * I) * S, (2.4 + 7 * I) * S, Math.round(14 * (0.6 + 0.8 * I)), (0.45 + 0.95 * I) * crowd)
+      cloud(into, rnd, p.x + 1.5 + 3 * I, p.y - 1 - 1.5 * I, (2 + 5 * I) * S, (1.6 + 3.5 * I) * S, Math.round(6 * (0.5 + I)), (0.14 + 0.22 * I) * crowd)
     }
   }
   if (layers.impact) {

@@ -7,18 +7,21 @@ const ALL_LINES = 400
 /** The most characters of one request the check quotes. */
 const ASK_CHARS = 1500
 
-/** The diff of `paths` with one line of context, cut per file and overall; a file past the cut says so. */
-export async function excerptOf(run: Run, root: string, paths: readonly string[]): Promise<Map<string, string>> {
+/**
+ * The diff of `paths` over `range` (the working tree against HEAD by default) with one line of
+ * context, cut per file and overall; a file past the cut says so.
+ */
+export async function excerptOf(run: Run, root: string, paths: readonly string[], range: readonly string[] = ['HEAD'], limits = { file: FILE_LINES, all: ALL_LINES }): Promise<Map<string, string>> {
   const out = new Map<string, string>()
 
   if (paths.length === 0) return out
-  const r = await run(['git', '-C', root, '-c', 'core.quotePath=false', 'diff', '-U1', '--no-color', '--no-ext-diff', 'HEAD', '--', ...paths])
-  let budget = ALL_LINES
+  const r = await run(['git', '-C', root, '-c', 'core.quotePath=false', 'diff', '-U1', '--no-color', '--no-ext-diff', ...range, '--', ...paths])
+  let budget = limits.all
   let path = ''
   let lines: string[] = []
   const flush = () => {
     if (path === '') return
-    const kept = lines.slice(0, Math.min(FILE_LINES, Math.max(0, budget)))
+    const kept = lines.slice(0, Math.min(limits.file, Math.max(0, budget)))
 
     budget -= kept.length
     out.set(path, kept.length < lines.length ? [...kept, `… ${lines.length - kept.length} more lines`].join('\n') : kept.join('\n'))

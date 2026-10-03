@@ -517,8 +517,15 @@ const unquoted = (text: string) => text.replace(/(["'`])(?:\\.|(?!\1).)*?\1/g, '
 /** A file that passes its neighbours' names on: an index module or a package's `__init__.py`. */
 const isBarrel = (path: string) => /(^|\/)(index\.[cm]?[jt]sx?|__init__\.py)$/.test(path)
 
-/** What a change reads as, declaration by declaration, and the files that use what it touched. */
-export type ChangeRead = { shapes: Map<string, Shape>; users: User[] }
+/**
+ * What a change reads as, declaration by declaration, and the files that use what it touched;
+ * `added` holds the lines it added to each file read, and `coined` the names those lines brought
+ * into a file that never had them before.
+ */
+export type ChangeRead = { shapes: Map<string, Shape>; users: User[]; added: Map<string, string[]>; coined: Map<string, string[]> }
+
+/** A name with the shape of an identifier, in code or in a string: snake_case, CONSTANT_CASE, camelCase or PascalCase. */
+const COINED = /(?<![\w$])[A-Za-z_$][\w$]*(?:_[A-Za-z0-9]|[a-z0-9][A-Z])[\w$]*(?![\w$])/g
 
 /**
  * Reads the change in three git calls (the diff, the files before, the files after) and finds
@@ -542,15 +549,17 @@ export async function readChange(
     .slice(0, MAX_FILES)
     .map(c => c.path)
   const shapes = new Map<string, Shape>(changes.map(c => [c.path, { path: c.path, kind: 'file', touches: [], words: [], members: [] }]))
+  const added = new Map<string, string[]>()
+  const coined = new Map<string, string[]>()
 
-  if (readable.length === 0) return { shapes, users: [] }
+  if (readable.length === 0) return { shapes, users: [], added, coined }
   const [diff, before, after] = await Promise.all([
     git('-c', 'core.quotePath=false', 'diff', '-U0', '--no-color', '--no-ext-diff', '--no-renames', from, ...to, '--', ...readable),
     git('grep', '-z', '-n', '-I', '-e', '', from, '--', ...readable),
     git('grep', '-z', '-n', '-I', '-e', '', ...to, '--', ...readable),
   ])
 
-  if (diff.exitCode !== 0) return { shapes, users: [] }
+  if (diff.exitCode !== 0) return { shapes, users: [], added, coined }
   const hunks = hunksOf(diff.stdout)
   const old = textsOf(before.stdout, from)
   const now = textsOf(after.stdout, to[0] ?? '')
@@ -558,7 +567,13 @@ export async function readChange(
   for (const path of readable) {
     const h = hunks.get(path)
 
-    if (h !== undefined) shapes.set(path, shapeOf(path, old.get(path) ?? null, now.get(path) ?? null, h.removed, h.added))
+    if (h === undefined) continue
+    shapes.set(path, shapeOf(path, old.get(path) ?? null, now.get(path) ?? null, h.removed, h.added))
+    const lines = h.added.map(n => now.get(path)?.[n - 1] ?? '')
+    const had = new Set((old.get(path) ?? []).flatMap(l => l.match(COINED) ?? []))
+
+    added.set(path, lines)
+    coined.set(path, [...new Set(lines.flatMap(l => l.match(COINED) ?? []))].filter(w => !had.has(w)))
   }
 
   // the files each changed file reaches at any distance: its users are among them
@@ -567,7 +582,7 @@ export async function readChange(
   const within = new Set([...reached.values()].flatMap(m => [...m.keys()]))
   const words = [...new Set(used.flatMap(s => s.words))]
 
-  if (within.size === 0 || words.length === 0) return { shapes, users: [] }
+  if (within.size === 0 || words.length === 0) return { shapes, users: [], added, coined }
   // past a few thousand files a pathspec costs more than the whole tree
   const hits = await git('grep', '-z', '-n', '-w', '-I', '-F', ...words.flatMap(w => ['-e', w]), ...to, '--', ...(within.size <= 4000 ? within : []))
   const rows = hitsOf(hits.stdout, to[0] ?? '')
@@ -600,7 +615,7 @@ export async function readChange(
     }
     users.push(...rowsOf.values())
   }
-  return { shapes, users }
+  return { shapes, users, added, coined }
 }
 
 /** `git grep -z -n` rows, `[ref:]path\0line\0text`, as `{ path, text }`. */

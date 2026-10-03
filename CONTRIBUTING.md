@@ -4,7 +4,7 @@ Thanks for looking at isobar. It is a small Claude Code mod with one job: show w
 
 ## Ground rules
 
-- **Facts come from git.** The weather reads `git grep`, `git log`, `git diff` and `git hash-object` and nothing else. Two model calls exist: the basemap, once per repository, and the opt-in scope check after a turn. A feature that needs another model call, a network request or a write to the repository needs an issue first.
+- **Facts come from git.** The weather reads `git grep`, `git log`, `git diff` and `git hash-object` and nothing else. Three model calls exist: the basemap, once per repository; the gist after a turn; and the opt-in scope check after a turn. A feature that needs another model call, a network request or a write to the repository needs an issue first.
 - **Every mark sits on what it describes.** A badge on its region's name, a note beside its file, the far file at the end of its track. A word that floats free of the map is a word the pane does not need.
 - **Rain never outranks the storm.** Reach is capped below the edit's colours, so the deepest reds always mean "you changed this".
 
@@ -28,8 +28,8 @@ pnpm preview --repo ../some-repo --out out/x   # the pane drawn to out/x.png, ou
 
 ## Layout
 
-- `hooks/register.tsx` is the mod. `session.start` registers `/isobar` and reads the terminal's colours; `turn.start` counts the session's turns; `tool.call` (Edit, Write, MultiEdit, NotebookEdit, Bash) schedules a refresh 500 ms after the last call; `turn.complete` runs the scope check when it is on; `ui.render` draws the pane as one Raster; hidden buttons carry the keys. Headless sessions do nothing.
-- `hooks/engine/` is pure (no `$`). `git.ts` gathers the facts and finds the change; `imports.ts` resolves JS, TS and Python imports; `graph.ts` walks reach, counts dependents and reads co-change history; `symbols.ts` reads a change declaration by declaration and finds the files that use what it touched; `session.ts` keeps the ledger of which turn wrote each file; `scope.ts` builds the scope check's question and reads its answer; `basemap.ts` cuts the repository into units, asks the model, parses its answer and falls back to folders; `weather.ts` turns a change into cells, reach, the far track, expected files and the forecast.
+- `hooks/register.tsx` is the mod. `session.start` registers `/isobar` and reads the terminal's colours; `turn.start` counts the session's turns; `tool.call` (Edit, Write, MultiEdit, NotebookEdit, Bash) schedules a refresh 500 ms after the last call; `turn.complete` runs the gist and, when it is on, the scope check; `ui.render` draws the pane as one Raster; hidden buttons carry the keys. Headless sessions do nothing.
+- `hooks/engine/` is pure (no `$`). `git.ts` gathers the facts and finds the change; `imports.ts` resolves JS, TS and Python imports; `graph.ts` walks reach, counts dependents and reads co-change history; `symbols.ts` reads a change declaration by declaration and finds the files that use what it touched; `session.ts` keeps the ledger of which turn wrote each file; `gist.ts` builds the gist's question and reads its captions; `scope.ts` builds the scope check's question and reads its answer; `basemap.ts` cuts the repository into units, asks the model, parses its answer and falls back to folders; `weather.ts` turns a change into cells, reach, the far track, expected files and the forecast.
 - `hooks/render/` is pure. `layout.ts` lays the treemap; `field.ts` turns storm and rain into radar bins; `sheet.ts` composes the framed chart; `palette.ts` holds every colour; `raster.ts` packs the grid.
 
 ## Rules that are easy to break

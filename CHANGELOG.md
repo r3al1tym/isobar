@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **The gist** (`gist`, on by default). Once a turn that changes files ends, `smallModel` reads each changed region's diff and captions what the change does there in a few words, under the region's name. It never sees your requests, so the caption is the diff's own account.
+
+### Changed
+- **`scopeModel` is now `smallModel`**, shared by the gist and the scope check, and defaults to `sonnet`.
+- **`NO TESTS` reads the test.** A changed test now covers an edit when its new lines name what the edit touched or a name the edit introduced (a new config key, a new helper), as well as when it imports the file or shares its name.
+- **Labels tell files apart.** A note or the track names a file by as much of its path as tells it from the others on the pane, such as `sansio/app.py` beside `flask/app.py`.
+- **Crowded regions keep their shape.** A region carrying many edits pools them into one storm that keeps its eyes and bands, instead of filling flat.
+- **Muted ink holds on light rain.** Muted text steps darker only once the rain under it deepens, so captions and reached names keep one tone.
+
 ## [0.2.0] — 2026-10-02
 
 The first public release. (0.1 was an internal preview.)
