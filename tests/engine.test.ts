@@ -308,7 +308,7 @@ describe('basemap and weather', () => {
     }
   })
 
-  test('the change burns red and its reach rains slate blue', () => {
+  test('the change storms red and its reach rains green', () => {
     const w = weatherOf(map, FACTS, { kind: 'uncommitted', label: 'uncommitted' }, [{ path: 'src/util.ts', added: 5, deleted: 1, isNew: false, isDeleted: false }])
     const grid = sheetOf({ repo: 'demo', map, files: [...FACTS.lines.keys()], lines: FACTS.lines, weather: w, layers: ALL_LAYERS }, 95, 60)
     const painted = new Set(grid.cells.flatMap(c => [c.fg, c.bg]))

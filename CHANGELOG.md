@@ -10,7 +10,7 @@ All notable changes to this project are documented here. The format is based on
 - **The gist** (`gist`, on by default). Once a turn that changes files ends, `smallModel` reads each changed region's diff and captions what the change does there in a few words, under the region's name. It never sees your requests, so the caption is the diff's own account.
 
 ### Changed
-- **Two hues.** The reach rains in slate blue, apart from the change's red storm, so what changed and what it touches read apart at a glance. Night and 256-colour terminals get their own slate ramps.
+- **Two hues, as on a radar.** The reach rains sage green, apart from the change's red storm, so what changed and what it touches read apart at a glance. Night and 256-colour terminals get their own green ramps.
 - **`scopeModel` is now `smallModel`**, shared by the gist and the scope check, and defaults to `sonnet`.
 - **`NO TESTS` reads the test.** A changed test now covers an edit when its new lines name what the edit touched or a name the edit introduced (a new config key, a new helper), as well as when it imports the file or shares its name.
 - **Labels tell files apart.** A note or the track names a file by as much of its path as tells it from the others on the pane, such as `sansio/app.py` beside `flask/app.py`.

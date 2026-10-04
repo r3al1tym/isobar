@@ -3,8 +3,9 @@
  * (each channel a multiple of 0x11), so each set is chosen on that grid: a colour
  * off it would be snapped channel by channel and drift in hue. The radar ramps walk
  * that grid in OKLab steps of 0.03 to 0.06, lightness always moving one way, so
- * no band jumps against its neighbour. The change burns in one hue and its reach rains in
- * another, slate blue, so what changed and what it touches read apart at a glance.
+ * no band jumps against its neighbour. As on a weather radar, the change storms red and its
+ * reach falls as green rain, here a sage that sits with the sepia inks, so what changed and
+ * what it touches read apart at a glance.
  *
  * Where Claude Code paints 256 colours (inside tmux, or where COLORTERM never says
  * truecolor) it moves each colour onto xterm's palette, and the cream paper lands on
@@ -59,9 +60,10 @@ export type Inks = {
 
 const paperRadar = [0xffeedd, 0xffddbb, 0xffccaa, 0xffbb99, 0xffaa88, 0xee9977, 0xee8866, 0xdd7755, 0xdd6644, 0xcc5533, 0xbb4433, 0xbb3322, 0xaa3322, 0x993322, 0x992211, 0x881111, 0x771111]
 const nightRadar = [0x111111, 0x221111, 0x331111, 0x441111, 0x552211, 0x662211, 0x884422, 0x995522, 0xaa5522, 0xbb6633, 0xcc7733, 0xdd8844, 0xee9955, 0xffaa66, 0xffbb77, 0xffcc88, 0xffddaa]
-// the reach's rain: slate blue, a step lighter than the storm bin for bin, so the change stays the loudest thing on the map
-const paperRain = [0xffeedd, 0xeeeeff, 0xddeeff, 0xccddee, 0xbbccee, 0xaabbdd, 0x99aacc, 0x8899bb, 0x7788aa, 0x667799, 0x556688, 0x445577, 0x334466, 0x223355, 0x112244, 0x112233, 0x001122]
-const nightRain = [0x111111, 0x111122, 0x112233, 0x223344, 0x223355, 0x334466, 0x335577, 0x446688, 0x557799, 0x6688aa, 0x7799bb, 0x88aacc, 0x99bbdd, 0xaaccee, 0xbbddee, 0xccddff, 0xddeeff]
+// the reach's rain: a radar's green, grounded to sage, a step lighter than the storm bin for bin, so the change stays the
+// loudest thing on the map
+const paperRain = [0xffeedd, 0xeeeedd, 0xddeecc, 0xccddbb, 0xbbccaa, 0xaabb99, 0x99aa88, 0x889977, 0x778866, 0x667755, 0x556644, 0x445533, 0x334422, 0x223311, 0x112211, 0x112200, 0x001100]
+const nightRain = [0x111111, 0x112211, 0x222211, 0x223311, 0x334422, 0x445533, 0x556644, 0x667755, 0x778866, 0x889977, 0x99aa88, 0xaabb99, 0xbbccaa, 0xccddbb, 0xddeecc, 0xeeeedd, 0xeeffee]
 
 /**
  * Each bin's hairline: two bins on, the dry ground's a neutral step off it. A 256 ramp repeats
@@ -197,9 +199,9 @@ const rampOf = (indices: readonly number[]) => indices.map((i, k) => xterm(i, in
 const paperRadar256 = rampOf([231, 223, 223, 216, 216, 173, 173, 173, 167, 167, 167, 88, 88, 88, 88, 52, 52])
 /** Near-black with the weather burning up through red and amber: the night chart in xterm's colours. */
 const nightRadar256 = rampOf([233, 52, 52, 52, 88, 88, 88, 131, 131, 173, 173, 180, 180, 216, 216, 223, 223])
-/** The reach's slate rain in xterm's colours, on each ground. */
-const paperRain256 = rampOf([231, 189, 189, 153, 153, 146, 110, 110, 67, 67, 61, 61, 24, 24, 17, 17, 17])
-const nightRain256 = rampOf([233, 19, 19, 24, 24, 24, 60, 61, 61, 67, 67, 104, 110, 110, 146, 153, 189])
+/** The reach's sage rain in xterm's colours, on each ground. */
+const paperRain256 = rampOf([231, 194, 194, 151, 151, 108, 107, 107, 101, 101, 65, 64, 64, 58, 58, 22, 22])
+const nightRain256 = rampOf([233, 22, 22, 22, 58, 58, 65, 101, 101, 107, 107, 108, 151, 151, 194, 194, 194])
 
 export const PAPER_INKS_256: Inks = {
   paper: paperRadar256[0]!,

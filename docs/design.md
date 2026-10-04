@@ -1,6 +1,6 @@
 # Design notes
 
-isobar treats a session's change as weather over a map that never moves. The storm sits where Claude edited in red, its rain falls in slate blue on the code that uses what changed, the latest turn shows brightest, and a badge marks an edit nobody asked for. The map is the same every time you look, so after a few changes you read it by shape, the way you read a weather chart of your own country.
+isobar treats a session's change as weather over a map that never moves. The storm sits where Claude edited in red, its rain falls in green on the code that uses what changed, as a radar shows storm and rain, the latest turn shows brightest, and a badge marks an edit nobody asked for. The map is the same every time you look, so after a few changes you read it by shape, the way you read a weather chart of your own country.
 
 ## Who it is for
 
@@ -25,7 +25,7 @@ Each layer is a fact or a forecast, and the picture keeps the two apart.
 
 ## Why a printed chart
 
-The terminal is treated as a print medium: a cartographic sheet set in half-block cells. The weather ramps step evenly in a perceptual colour space, so no band jumps against its neighbour. The change and its reach take two hues, red and slate blue, so the two read apart without a legend. Words are kept to what the map cannot say by itself, and each one sits on what it describes. The chart is printed on warm paper by default; in 256-colour terminals it moves to white paper with xterm's own colours, since the cream has no 256-colour equivalent.
+The terminal is treated as a print medium: a cartographic sheet set in half-block cells. The weather ramps step evenly in a perceptual colour space, so no band jumps against its neighbour. The change and its reach take a radar's two hues, red and green, the green grounded to a sage that sits with the sepia inks, so the two read apart without a legend. Words are kept to what the map cannot say by itself, and each one sits on what it describes. The chart is printed on warm paper by default; in 256-colour terminals it moves to white paper with xterm's own colours, since the cream has no 256-colour equivalent.
 
 ## Where it came from
 

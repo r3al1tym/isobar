@@ -1,6 +1,6 @@
 {
   "name": "isobar",
-  "description": "isobar, a Claude Code mod: your change as weather over a fixed map of the codebase",
+  "description": "isobar, a Claude Code mod: a weather map for your change, over a fixed map of the codebase",
   "owner": {
     "name": "r3al1tym",
     "url": "https://github.com/r3al1tym"
@@ -9,7 +9,7 @@
     {
       "name": "isobar",
       "source": "./",
-      "description": "isobar: what your change did across the codebase, at a glance, drawn as weather over a map of it"
+      "description": "isobar: a weather map for your change, showing what it did across the codebase at a glance"
     }
   ]
 }
