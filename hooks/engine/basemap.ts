@@ -13,6 +13,28 @@ export function regionFinder(regions: readonly Region[]): (path: string) => Regi
   return path => rules.find(({ p }) => p === '' || path === p || (p.endsWith('/') ? path.startsWith(p) : path.startsWith(`${p}/`)))?.r
 }
 
+/**
+ * The region a file outside every rule belongs to by its folder: the one holding most of the
+ * files in its nearest folder that has any mapped, so a new test joins the tests beside it.
+ */
+export function folderRegion(find: (path: string) => Region | undefined, files: Iterable<string>, path: string): Region | undefined {
+  const known = [...files]
+
+  for (let dir = dirOf(path); dir !== ''; dir = dirOf(dir.slice(0, -1))) {
+    const votes = new Map<Region, number>()
+
+    for (const f of known) {
+      const r = f.startsWith(dir) ? find(f) : undefined
+
+      if (r !== undefined) votes.set(r, (votes.get(r) ?? 0) + 1)
+    }
+    const best = [...votes].sort((a, b) => b[1] - a[1] || a[0].id.localeCompare(b[0].id))[0]?.[0]
+
+    if (best !== undefined) return best
+  }
+  return undefined
+}
+
 /** A unit the model groups into regions: one file, or a folder taken whole. */
 export type Unit = { path: string; files: number; lines: number; imports: string[] }
 
@@ -225,11 +247,7 @@ export function completeRegions(regions: Region[], layers: Layer[], facts: Facts
     }
     let target: string | undefined = [...votes].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0]
 
-    for (let dir = dirOf(file); target === undefined && dir !== ''; dir = dirOf(dir.slice(0, -1))) {
-      const probe = [...facts.lines.keys()].find(f => f.startsWith(dir) && find(f) !== undefined)
-
-      if (probe !== undefined) target = find(probe)?.id
-    }
+    target ??= folderRegion(find, facts.lines.keys(), file)?.id
     if (target === undefined && isKept) {
       const roots = new Map<string, number>()
 

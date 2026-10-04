@@ -1,4 +1,4 @@
-import { regionFinder } from './basemap'
+import { folderRegion, regionFinder } from './basemap'
 import { chainOf, dependentsOf, expectedOf, graphOf, isTest, reachOf, type Expected, type Reach } from './graph'
 import { names, type ChangeRead, type Kind, type Touch } from './symbols'
 import type { Base, Basemap, Change, Facts } from './types'
@@ -97,7 +97,8 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 export function weatherOf(map: Basemap, facts: Facts, base: Base, changes: readonly Change[], read?: ChangeRead, session: Session = {}): Weather {
   const graph = graphOf(facts.edges)
   const find = regionFinder(map.regions)
-  const regionOf = (p: string) => find(p)?.id ?? map.regions[map.regions.length - 1]?.id ?? ''
+  // a file no rule maps (one the session just created) joins the region its folder's files are in
+  const regionOf = (p: string) => (find(p) ?? folderRegion(find, facts.lines.keys(), p))?.id ?? map.regions[map.regions.length - 1]?.id ?? ''
   const fileCount = Math.max(2, facts.lines.size)
   const changedPaths = changes.map(c => c.path)
   const inChange = new Set(changedPaths)

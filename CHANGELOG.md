@@ -14,6 +14,7 @@ All notable changes to this project are documented here. The format is based on
 - **`NO TESTS` reads the test.** A changed test now covers an edit when its new lines name what the edit touched or a name the edit introduced (a new config key, a new helper), as well as when it imports the file or shares its name.
 - **Labels tell files apart.** A note or the track names a file by as much of its path as tells it from the others on the pane, such as `sansio/app.py` beside `flask/app.py`.
 - **Crowded regions keep their shape.** A region carrying many edits pools them into one storm that keeps its eyes and bands, instead of filling flat.
+- **A new file lands beside its folder.** A file the session created that no region's rule names joins the region holding most of its folder's files, where it used to fall into the map's last region.
 - **Muted ink holds on light rain.** Muted text steps darker only once the rain under it deepens, so captions and reached names keep one tone.
 
 ## [0.2.0] — 2026-10-02

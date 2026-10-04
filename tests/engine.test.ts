@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { completeRegions, finishBasemap, parseBasemapReply, regionFinder, unitsOf } from '../hooks/engine/basemap'
+import { completeRegions, finishBasemap, folderRegion, parseBasemapReply, regionFinder, unitsOf } from '../hooks/engine/basemap'
 import { gatherFacts, parseCounts, parseEmpty, parseHits, parseLog, parseNumstat } from '../hooks/engine/git'
 import { chainOf, expectedOf, graphOf, reachOf } from '../hooks/engine/graph'
 import { edgesOf, joinedPython, jsRulesOf, normalize, parseJsonc, resolveJs, resolvePython } from '../hooks/engine/imports'
@@ -246,6 +246,19 @@ describe('basemap and weather', () => {
 
     for (const file of FACTS.lines.keys()) expect(find(file)).toBeDefined()
     for (const r of map.regions) expect(r.weight >= 1 && r.weight <= 10).toBe(true)
+  })
+
+  test("a file no rule maps joins the region most of its folder's files are in", () => {
+    const regions = [
+      { id: 'core', name: 'Core', blurb: '', layer: 'quality', paths: ['tests/test_a.py', 'tests/test_b.py'], weight: 1 },
+      { id: 'extra', name: 'Extra', blurb: '', layer: 'quality', paths: ['tests/test_c.py', 'examples/'], weight: 1 },
+    ]
+    const find = regionFinder(regions)
+    const files = ['tests/test_a.py', 'tests/test_b.py', 'tests/test_c.py', 'examples/app.py']
+
+    expect(folderRegion(find, files, 'tests/test_new.py')?.id).toBe('core')
+    expect(folderRegion(find, files, 'tests/unit/test_deep.py')?.id).toBe('core')
+    expect(folderRegion(find, files, 'docs/new.md')).toBeUndefined()
   })
 
   test('a kept map never grows a region: new files join the regions already there', () => {
