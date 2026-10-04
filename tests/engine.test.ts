@@ -7,7 +7,7 @@ import { edgesOf, joinedPython, jsRulesOf, normalize, parseJsonc, resolveJs, res
 import { weatherOf } from '../hooks/engine/weather'
 import { ALL_LAYERS } from '../hooks/render/field'
 import { layoutOf } from '../hooks/render/layout'
-import { colorsOf, NIGHT_INKS_256, PAPER_INKS, PAPER_INKS_256, roundedXtermOf, shown256, xtermOf } from '../hooks/render/palette'
+import { colorsOf, NIGHT_INKS_256, PAPER_INKS, PAPER_INKS_256, roundedXtermOf, shown256, STORM, xtermOf } from '../hooks/render/palette'
 import { codePointOf } from '../hooks/render/raster'
 import { sheetOf, wrap } from '../hooks/render/sheet'
 import { FACTS, MODEL_REPLY } from './fixtures'
@@ -308,6 +308,16 @@ describe('basemap and weather', () => {
     }
   })
 
+  test('the change burns red and its reach rains slate blue', () => {
+    const w = weatherOf(map, FACTS, { kind: 'uncommitted', label: 'uncommitted' }, [{ path: 'src/util.ts', added: 5, deleted: 1, isNew: false, isDeleted: false }])
+    const grid = sheetOf({ repo: 'demo', map, files: [...FACTS.lines.keys()], lines: FACTS.lines, weather: w, layers: ALL_LAYERS }, 95, 60)
+    const painted = new Set(grid.cells.flatMap(c => [c.fg, c.bg]))
+
+    expect(w.reach.length > 0).toBe(true)
+    expect(PAPER_INKS.radar.slice(STORM).some(c => painted.has(c))).toBe(true)
+    expect(PAPER_INKS.rain.slice(1).some(c => painted.has(c))).toBe(true)
+  })
+
   test('Claude Code paints 256 colours inside tmux and wherever COLORTERM never says truecolor', () => {
     expect(colorsOf({ COLORTERM: 'truecolor' })).toBe('truecolor')
     expect(colorsOf({ COLORTERM: 'truecolor', TMUX: '/tmp/tmux-1/default,1,0' })).toBe('256')
@@ -326,19 +336,23 @@ describe('basemap and weather', () => {
 
     for (const inks of [PAPER_INKS_256, NIGHT_INKS_256]) {
       // rounded or matched to its nearest, every ink lands on the same xterm colour
-      const all = [...inks.radar, ...inks.line, ...Object.values(inks).flatMap(v => (typeof v === 'number' ? [v] : typeof v === 'object' && 'fg' in v ? [v.fg, v.bg] : []))]
+      const all = [...inks.radar, ...inks.line, ...inks.rain, ...inks.rainLine, ...Object.values(inks).flatMap(v => (typeof v === 'number' ? [v] : typeof v === 'object' && 'fg' in v ? [v.fg, v.bg] : []))]
 
       expect(all.filter(c => xtermOf(c) !== roundedXtermOf(c))).toEqual([])
-      // every bin keeps its own name, so the sheet can tell them apart where they show alike
-      expect(new Set(inks.radar).size).toBe(inks.radar.length)
-      const shown = inks.radar.map(c => lightness(shown256(c)))
-      const isDarkening = shown.every((l, k) => k === 0 || (inks.isNight ? l >= shown[k - 1]! : l <= shown[k - 1]!))
+      for (const [ramp, line] of [[inks.radar, inks.line], [inks.rain, inks.rainLine]] as const) {
+        // every bin keeps its own name, so the sheet can tell them apart where they show alike
+        expect(new Set(ramp).size).toBe(ramp.length)
+        const shown = ramp.map(c => lightness(shown256(c)))
+        const isDarkening = shown.every((l, k) => k === 0 || (inks.isNight ? l >= shown[k - 1]! : l <= shown[k - 1]!))
 
-      expect(isDarkening).toBe(true)
-      // each hairline shows apart from the bin it crosses, short of the core's own colour
-      const core = shown256(inks.radar[inks.radar.length - 1]!)
+        expect(isDarkening).toBe(true)
+        // each hairline shows apart from the bin it crosses, short of the core's own colour
+        const core = shown256(ramp[ramp.length - 1]!)
 
-      inks.radar.forEach((c, k) => expect(shown256(c) === core || shown256(inks.line[k]!) !== shown256(c)).toBe(true))
+        ramp.forEach((c, k) => expect(shown256(c) === core || shown256(line[k]!) !== shown256(c)).toBe(true))
+      }
+      // the rain shares only the dry ground with the storm, so a painted colour names its bin
+      expect(inks.rain.slice(1).filter(c => inks.radar.includes(c))).toEqual([])
     }
     expect(shown256(PAPER_INKS_256.paper)).toBe(0xffffff)
   })

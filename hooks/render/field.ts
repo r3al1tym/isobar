@@ -19,6 +19,8 @@ export type Field = {
   h: number
   /** radar bin per pixel, 0 (dry) to 9 (the eye); the palette colours it */
   level: Uint8Array
+  /** 1 where the reach's rain sets the pixel's bin rather than a storm: it takes the rain's own hue */
+  wet: Uint8Array
   /** where each edit's eye is drawn, as a glyph over the weather */
   eyes: { path: string; x: number; y: number; risk: number; isLatest: boolean }[]
   /** where history expected a change: drawn as dashed braille contours over the weather */
@@ -36,9 +38,10 @@ export function fieldOf(layout: Layout, weather: Weather | null, layers: Layers,
   const w = layout.cols
   const h = layout.rows * 2
   const level = new Uint8Array(w * h)
+  const wet = new Uint8Array(w * h)
   const seed = hashOf(seedText)
 
-  if (weather === null) return { w, h, level, eyes: [], rings: [], track: [] }
+  if (weather === null) return { w, h, level, wet, eyes: [], rings: [], track: [] }
 
   const rnd = mulberry(seed)
   const pointOf = placer(layout, seed)
@@ -112,7 +115,7 @@ export function fieldOf(layout: Layout, weather: Weather | null, layers: Layers,
   splat(leadDensity, w, h, lead, warp, 2.2)
   splat(stormDensity, w, h, storm, warp, 2.2)
   splat(rainDensity, w, h, rain, warp, 1.6)
-  radar(level, leadDensity, stormDensity, rainDensity, w, h, seed)
+  radar(level, wet, leadDensity, stormDensity, rainDensity, w, h, seed)
   // at most two rings, each on open ground: a ring inside the storm or over another reads as a tangle
   const rings: Field['rings'] = []
 
@@ -127,7 +130,7 @@ export function fieldOf(layout: Layout, weather: Weather | null, layers: Layers,
     ? [...weather.cells].sort((a, b) => Number(b.isLatest) - Number(a.isLatest) || b.risk - a.risk).slice(0, 8).map(c => ({ path: c.path, ...pointOf(c.path, c.region), risk: c.risk, isLatest: c.isLatest }))
     : []
 
-  return { w, h, level, eyes, rings, track }
+  return { w, h, level, wet, eyes, rings, track }
 }
 
 /** A file's point; a file the layout has no point for (new, untracked) gets a stable spot in its cell. */
@@ -249,7 +252,7 @@ function splat(density: Float32Array, w: number, h: number, puffs: readonly Puff
  * them, and the rain stops below both; the faintest rain is left as dry ground so a wide
  * reach never hazes the map.
  */
-function radar(level: Uint8Array, lead: Float32Array, storm: Float32Array, rain: Float32Array, w: number, h: number, seed: number) {
+function radar(level: Uint8Array, wet: Uint8Array, lead: Float32Array, storm: Float32Array, rain: Float32Array, w: number, h: number, seed: number) {
   const top = BINS - 1
   const binOf = (d: number, k: number, lift = 0.5) => Math.max(0, Math.floor(top * (1 - Math.exp(-k * d)) + lift))
 
@@ -263,7 +266,12 @@ function radar(level: Uint8Array, lead: Float32Array, storm: Float32Array, rain:
       if (l < 0.05 && s < 0.05 && r < 0.05) continue
       const jitter = 0.82 + 0.36 * valueNoise(x * 0.11, y * 0.16, seed + 5)
 
-      level[i] = Math.min(top, Math.max(binOf(l * jitter, 0.3), Math.min(COOL_TOP, binOf(s * jitter * 0.55, 0.3)), Math.min(RAIN_TOP, binOf(r * jitter, 0.16, -1.6))))
+      const fire = Math.max(binOf(l * jitter, 0.3), Math.min(COOL_TOP, binOf(s * jitter * 0.55, 0.3)))
+      const wash = Math.min(RAIN_TOP, binOf(r * jitter, 0.16, -1.6))
+
+      level[i] = Math.min(top, Math.max(fire, wash))
+      // the rain takes its own hue wherever it, and no storm, sets the bin
+      wet[i] = wash > fire ? 1 : 0
     }
   }
 }

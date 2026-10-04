@@ -163,7 +163,7 @@ function legend(grid: Sheet, layers: Layers, row: number) {
   const g = grid.inks
   const items = [
     { key: '1', mark: '●', fg: g.radar[BINS - 2]!, name: 'change', on: layers.code },
-    { key: '2', mark: '■', fg: g.radar[6]!, name: 'reach', on: layers.impact },
+    { key: '2', mark: '■', fg: g.rain[6]!, name: 'reach', on: layers.impact },
     { key: '3', mark: '■', fg: g.radar[STORM + 2]!, name: 'risk', on: layers.risk },
     { key: '4', mark: '◌', fg: g.history, name: 'history', on: layers.history },
   ]
@@ -194,7 +194,7 @@ function paint(grid: Sheet, field: Field, x0: number, y0: number) {
   const px = (x: number, y: number) => {
     const i = y * field.w + x
 
-    return grid.inks.radar[field.level[i] ?? 0] ?? grid.inks.paper
+    return (field.wet[i] === 1 ? grid.inks.rain : grid.inks.radar)[field.level[i] ?? 0] ?? grid.inks.paper
   }
 
   for (let r = 0; r < field.h / 2; r++) {
@@ -217,7 +217,14 @@ function groundOf(grid: Sheet, x: number, y: number): number {
   return binOf(grid, at.fg) >= binOf(grid, at.bg) ? at.fg : at.bg
 }
 
-const binOf = (grid: Sheet, color: number) => Math.max(0, grid.inks.radar.indexOf(color))
+/** The bin a painted colour stands for, in the storm's hue or the rain's. */
+const binOf = (grid: Sheet, color: number) => {
+  const k = grid.inks.radar.indexOf(color)
+
+  return k >= 0 ? k : Math.max(0, grid.inks.rain.indexOf(color))
+}
+/** The hairline that crosses a painted colour: two bins on, in the hue it was painted in. */
+const lineOf = (grid: Sheet, color: number) => (grid.inks.radar.includes(color) ? grid.inks.line : grid.inks.rain.includes(color) ? grid.inks.rainLine : grid.inks.line)[binOf(grid, color)]
 
 /** Hairlines between cells, multiplied into the weather so they darken it instead of sitting on it. */
 function lines(grid: Sheet, layout: Layout, x0: number, y0: number) {
@@ -236,7 +243,7 @@ function lines(grid: Sheet, layout: Layout, x0: number, y0: number) {
       const glyph = BOX[(up ? 8 : 0) | (down ? 4 : 0) | (lf ? 2 : 0) | (rt ? 1 : 0)] ?? '·'
       const ground = groundOf(grid, x0 + c, y0 + r)
 
-      put(grid, x0 + c, y0 + r, { glyph, fg: grid.inks.line[binOf(grid, ground)] ?? grid.inks.line[0], bg: ground })
+      put(grid, x0 + c, y0 + r, { glyph, fg: lineOf(grid, ground) ?? grid.inks.line[0], bg: ground })
     }
   }
 }
@@ -276,7 +283,7 @@ function names(grid: Sheet, layout: Layout, weather: Weather | null, layers: Lay
           const ground = groundOf(grid, rect.x + 1 + i, rect.y)
           const bin = binOf(grid, ground)
 
-          put(grid, rect.x + 1 + i, rect.y, { glyph: name[i], fg: bin === 0 ? g.nameDry : g.line[bin] ?? g.nameDry, bg: ground })
+          put(grid, rect.x + 1 + i, rect.y, { glyph: name[i], fg: bin === 0 ? g.nameDry : lineOf(grid, ground) ?? g.nameDry, bg: ground })
         }
       }
       continue

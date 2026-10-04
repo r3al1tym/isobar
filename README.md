@@ -14,7 +14,7 @@ isobar is a [Claude Code](https://claude.com/claude-code) mod that docks a pane 
 
 - **Where the change landed.** A storm on each file Claude edited, in its region of the map. You see at a glance whether the work landed where you expected.
 - **What it did there.** Once a turn ends, a small model reads the diff of each changed region and captions it under the region's name in a few words, such as `warns on slow requests` or `covers slow warnings`. The caption is the diff's own account, written without your requests, so you can set it against what you meant.
-- **What it reaches.** Rain on the files that use what changed. isobar reads each edit declaration by declaration: a new signature or a new behaviour rains on the files that name it, and an edit to comments or imports stays dry. The note beside the edit says how far it reaches, as in `new behaviour · 11 uses in 3 files`.
+- **What it reaches.** Slate-blue rain on the files that use what changed, apart from the change's red storm. isobar reads each edit declaration by declaration: a new signature or a new behaviour rains on the files that name it, and an edit to comments or imports stays dry. The note beside the edit says how far it reaches, as in `new behaviour · 11 uses in 3 files`.
 - **This turn against the session.** The latest turn's edits burn brightest and earlier turns fade, so a long session still reads in one look.
 - **What you never asked for.** Turn on the scope check and, after each turn, a small model compares your requests with the turn's diff. An edit nobody asked for carries `UNASKED` and a few words on what it did.
 - **The same frame every time.** Each repository is cut into named regions once and kept. Every change lands on the same map, so after a few sessions you read a change by its shape, the way you read a weather chart of your own country.
@@ -45,7 +45,7 @@ For one session only: `claude --plugin-dir ~/src/isobar`.
 - **Caption.** Under a changed region's name, what the change does there, from the gist.
 - **Badges.** The region's name carries `CHANGED +a −d`, `NO TESTS` when source code changed what it does and no test moved with it (a changed test counts when it imports the file, shares its name, or its new lines name what the edit touched or introduced, such as a new config key), `UNASKED` when the scope check flagged an edit, and `EXPECTED` on a region history says should have changed.
 - **Note.** The edited file and the declaration it touched, then how it reaches: `new signature` or `new behaviour` with its uses, `comments only`, or, for a file isobar reads whole, how many files depend on it.
-- **Rain.** The files that use what changed, fading with import distance.
+- **Rain.** The files that use what changed, in slate blue, fading with import distance.
 - **Track.** The farthest file the change reaches, along its real import chain, labelled `file · N hops`. A file is named by as much of its path as tells it apart from the others on the pane: `sansio/app.py` beside `flask/app.py`.
 - **Title.** The repository, and how many files the latest turn changed against the rest of the session.
 
@@ -93,7 +93,7 @@ To give a team one shared map, commit it as `.isobar/map.json`; from a clone of 
 6. **The gist.** When a turn ends, one call to `smallModel` carries each changed region's name and blurb, its files with their line counts and touched declarations, and their diff, capped at 400 lines shared across the files. It asks for a caption of 2 to 4 words per region. Your requests stay out of it. A caption holds until its region's change changes; while a turn runs, the last caption stays.
 7. **The scope check** (opt-in). When a turn ends, one call to `smallModel` carries your last four requests and the turn's diff, capped at 400 lines, and asks which changes no request called for. A flag holds until the file changes again.
 8. **The map.** Once per repository, isobar cuts the tree into about 160 units (big source folders opened to their files, the rest taken a folder at a time) and asks the session's model to group them into at most 20 regions in 3 to 6 bands, from where work enters down to the foundations. Every file lands in exactly one region; when the model's answer is unusable, the folders themselves become the regions. A region's area is its lines of code times how much of the rest depends on it. The map is kept in Claude Code's plugin store, and new files join the region their imports point to, so the frame never grows or moves.
-9. **The picture.** The storm and the rain are density fields over the map's layout, binned into 17 colour steps that move evenly in a perceptual colour space, drawn in half-block cells as one Raster.
+9. **The picture.** The storm and the rain are density fields over the map's layout, binned into 17 colour steps that move evenly in a perceptual colour space: the storm in reds, the rain in slate blues wherever it outweighs a storm. They are drawn in half-block cells as one Raster.
 
 Refreshes run 500 ms after Claude's last tool call, one at a time.
 
