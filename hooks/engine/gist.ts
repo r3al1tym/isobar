@@ -1,12 +1,14 @@
 import type { Cell } from './weather'
 import type { Basemap } from './types'
 
-/** The most diff lines the gist sends the model in all, shared across the files so every region gets some. */
+/** The most diff lines the gist sends the model in all, shared across the files. */
 const ALL_LINES = 400
-/** The fewest diff lines one file gets, however many files changed. */
+/** The fewest diff lines one file may take while the whole lasts; files past it get none. */
 const FILE_FLOOR = 12
+/** The most characters of a caption: the question asks for 24, and a longer answer is cut. */
+const WHAT_CHARS = 40
 
-/** Each file's share of the diff the gist sends: an even split of the whole, never below the floor. */
+/** Each file's share of the diff the gist sends: an even split of the whole, at least the floor while it lasts. */
 export const gistLines = (files: number) => ({ file: Math.max(FILE_FLOOR, Math.floor(ALL_LINES / Math.max(1, files))), all: ALL_LINES })
 
 /**
@@ -54,7 +56,7 @@ export function parseGistReply(text: string, shown: ReadonlySet<string>): Map<st
     for (const row of reply.regions as { id?: unknown; what?: unknown }[]) {
       if (typeof row?.id !== 'string' || !shown.has(row.id) || typeof row.what !== 'string') continue
       // a caption reads in lowercase on the map; an acronym or a quoted name keeps its capitals
-      const what = row.what.trim().replace(/^["']|["']$/g, '').replace(/\.$/, '').replace(/\s+/g, ' ')
+      const what = row.what.trim().replace(/^["']|["']$/g, '').replace(/\.$/, '').replace(/\s+/g, ' ').slice(0, WHAT_CHARS).trim()
 
       if (what !== '') out.set(row.id, /^[A-Z][a-z]/.test(what) ? what[0]!.toLowerCase() + what.slice(1) : what)
     }

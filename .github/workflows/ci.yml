@@ -6,17 +6,26 @@ on:
     tags: ["v*"]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   mod:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # the oldest Claude Code the README says isobar is checked against, and the newest
+        claude: ["2.1.287", "latest"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
       - name: Install Claude Code
-        run: npm install -g @anthropic-ai/claude-code
+        run: npm install -g @anthropic-ai/claude-code@${{ matrix.claude }}
       - name: Validate the manifests and the hooks module
-        run: claude plugin validate . && claude plugin validate .claude-plugin/plugin.json
+        run: claude plugin validate --strict .
       - name: Run the test suite against the engine
         run: claude plugin test .

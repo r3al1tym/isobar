@@ -1,10 +1,11 @@
 /**
  * Shared setup for the benchmarks: where isobar and the cloned repos live, isobar's own
- * modules, and a `run` that stands in for the engine's `$.process.run`.
+ * modules, and a `run` that stands in for the mod's git reads through `$.process.spawn`.
  */
 import { execFile } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { homedir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -27,9 +28,14 @@ export const layout = await load('hooks/render/layout.ts')
 /** The TypeScript compiler isobar already depends on. */
 export const ts = createRequire(from('package.json'))('typescript')
 
-/** Clones go in `$BENCH_DIR/repos`, results in `$BENCH_DIR/results`. */
-export const BENCH = process.env.BENCH_DIR ?? '/tmp/isobar-bench'
+/**
+ * Clones go in `$BENCH_DIR/repos`, results in `$BENCH_DIR/results`. The default sits in the
+ * contributor's own cache, made private, since the bench runs the Python it finds there.
+ */
+export const BENCH = process.env.BENCH_DIR ?? resolve(process.env.XDG_CACHE_HOME ?? resolve(homedir(), '.cache'), 'isobar-bench')
 export const RESULTS = resolve(BENCH, 'results')
+
+mkdirSync(BENCH, { recursive: true, mode: 0o700 })
 
 export type Repo = { name: string; url: string; sha: string; lang: 'js' | 'py'; package?: string; path?: string }
 

@@ -12,7 +12,7 @@ The question you want the map to answer while you work.
 What you'd like isobar to show or do.
 
 **Fit with the tool's constraints**
-isobar reads git, draws one picture, and calls the model once per repository for the basemap. If this needs another model call, network access or a write to the repository, say so here so we can discuss the approach first.
+isobar reads git, draws one picture, and makes three model calls: the basemap once per repository, the gist at session start and after a turn, and the opt-in scope check. If this needs another model call, network access or a write to the repository, say so here so we can discuss the approach first.
 
 **Alternatives you've considered**
 Anything you tried or ruled out.

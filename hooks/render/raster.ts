@@ -21,14 +21,6 @@ export const luma = (c: number): number => {
   return 0.299 * r + 0.587 * g + 0.114 * b
 }
 
-/** `a` multiplied by `b`, as a multiply blend at full strength `t`. */
-export function multiplyColor(a: number, b: number, t = 1): number {
-  const [ar, ag, ab] = channels(a)
-  const [br, bg, bb] = channels(b)
-
-  return rgb(ar * (1 - t + (t * br) / 255), ag * (1 - t + (t * bg) / 255), ab * (1 - t + (t * bb) / 255))
-}
-
 export function gridOf(cols: number, rows: number, bg: number): Grid {
   return { cols, rows, cells: Array.from({ length: cols * rows }, () => ({ glyph: ' ', fg: bg, bg })) }
 }
@@ -44,11 +36,14 @@ export function cellAt(grid: Grid, x: number, y: number): Cell | undefined {
   return x < 0 || y < 0 || x >= grid.cols || y >= grid.rows ? undefined : grid.cells[y * grid.cols + x]
 }
 
-/** Writes `text` from (x, y) in `fg`, keeping each cell's background unless `bg` is given. */
+/**
+ * Writes `text` from (x, y) in `fg`, keeping each cell's background unless `bg` is given. The text
+ * is composed first (NFC), so a letter and its accent take one cell as one code point.
+ */
 export function write(grid: Grid, x: number, y: number, text: string, fg: number, bg?: number) {
   let i = 0
 
-  for (const ch of text) {
+  for (const ch of text.normalize('NFC')) {
     const at = cellAt(grid, x + i, y)
 
     if (at !== undefined) {
@@ -60,13 +55,24 @@ export function write(grid: Grid, x: number, y: number, text: string, fg: number
   }
 }
 
+/**
+ * Code points that take no cell of their own or move the text around them: unassigned, format
+ * (bidi controls, zero-width spaces), combining marks, line and paragraph separators, and the
+ * emoji that draw two cells wide.
+ */
+const NO_CELL = /[\p{Cn}\p{Cf}\p{Mn}\p{Mc}\p{Me}\p{Zl}\p{Zp}\p{Emoji_Presentation}]/u
+
 /** A printable width-1 BMP code point, else a space. */
 export function codePointOf(glyph: string): number {
   const p = glyph.codePointAt(0) ?? 0x20
   const ok =
     p >= 0x20 && p <= 0xffff && p !== 0x7f && !(p >= 0x80 && p < 0xa0) && !(p >= 0xd800 && p <= 0xdfff) &&
     !(p >= 0x1100 && p <= 0x115f) && !(p >= 0x2e80 && p <= 0xa4cf) && !(p >= 0xac00 && p <= 0xd7a3) &&
-    !(p >= 0xf900 && p <= 0xfaff) && !(p >= 0xfe30 && p <= 0xfe6f) && !(p >= 0xff00 && p <= 0xff60) && !(p >= 0xffe0 && p <= 0xffe6)
+    !(p >= 0xf900 && p <= 0xfaff) && !(p >= 0xfe30 && p <= 0xfe6f) && !(p >= 0xff00 && p <= 0xff60) && !(p >= 0xffe0 && p <= 0xffe6) &&
+    // Hangul jamo that join the syllable before them, and code points a terminal draws two cells wide or in none
+    !(p >= 0x1160 && p <= 0x11ff) && !(p >= 0xd7b0 && p <= 0xd7ff) && !(p >= 0xa960 && p <= 0xa97f) && !(p >= 0xfe10 && p <= 0xfe19) &&
+    !(p >= 0x2329 && p <= 0x232a) && !(p >= 0x2630 && p <= 0x2637) && !(p >= 0x268a && p <= 0x268f) && p !== 0x0980 && p !== 0x0c80 && p !== 0x0d3a &&
+    (p < 0x7f || !NO_CELL.test(String.fromCodePoint(p)))
 
   return ok ? p : 0x20
 }

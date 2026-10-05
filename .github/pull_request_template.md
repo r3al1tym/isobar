@@ -10,7 +10,7 @@ A short description of the change and why.
 - [ ] Refactor / cleanup
 
 **Checklist**
-- [ ] `claude plugin validate .` and `claude plugin test .` pass locally
+- [ ] `pnpm typecheck`, `pnpm validate` and `pnpm test` pass locally
 - [ ] Added or updated a test for any behaviour change
 - [ ] Attached a before/after render (`pnpm preview`) or live capture if I touched the picture
 - [ ] No new model calls, network access or repository writes (or explained why below)

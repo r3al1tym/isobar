@@ -1,14 +1,18 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { completeRegions, finishBasemap, folderRegion, parseBasemapReply, regionFinder, unitsOf } from '../hooks/engine/basemap'
-import { gatherFacts, parseCounts, parseEmpty, parseHits, parseLog, parseNumstat } from '../hooks/engine/git'
+import { completeRegions, finishBasemap, folderRegion, parseBasemapReply, regionFinder, sanitizeBasemap, unitsOf } from '../hooks/engine/basemap'
+import { currentChange, gatherFacts, parseCounts, parseEmpty, parseLog, parseNumstat, refsOf } from '../hooks/engine/git'
+import { parseGistReply } from '../hooks/engine/gist'
+import { excerptOf, parseScopeReply } from '../hooks/engine/scope'
+import { hashesOf, UNHASHABLE } from '../hooks/engine/session'
+import type { Run } from '../hooks/engine/types'
 import { chainOf, expectedOf, graphOf, reachOf } from '../hooks/engine/graph'
 import { edgesOf, joinedPython, jsRulesOf, normalize, parseJsonc, resolveJs, resolvePython } from '../hooks/engine/imports'
 import { weatherOf } from '../hooks/engine/weather'
 import { ALL_LAYERS } from '../hooks/render/field'
 import { layoutOf } from '../hooks/render/layout'
 import { colorsOf, NIGHT_INKS_256, PAPER_INKS, PAPER_INKS_256, roundedXtermOf, shown256, STORM, xtermOf } from '../hooks/render/palette'
-import { codePointOf } from '../hooks/render/raster'
+import { codePointOf, gridOf, write } from '../hooks/render/raster'
 import { sheetOf, wrap } from '../hooks/render/sheet'
 import { FACTS, MODEL_REPLY } from './fixtures'
 
@@ -207,9 +211,8 @@ describe('git output', () => {
     expect(facts.edges).toEqual([{ from: 'src/a.ts', to: 'lib/util.ts' }, { from: 'pkg/mod.py', to: 'pkg/__init__.py' }])
   })
 
-  test('counts, hits and log', () => {
+  test('counts and log', () => {
     expect([...parseCounts('a.ts\x0012\nb.ts\x003\n')]).toEqual([['a.ts', 12], ['b.ts', 3]])
-    expect(parseHits("a.ts\x004\x00import x from './b'\n")).toEqual([{ path: 'a.ts', text: "import x from './b'" }])
     expect(parseLog('\x1e\na.ts\nb.ts\n\x1e\nc.ts\n')).toEqual([['a.ts', 'b.ts'], ['c.ts']])
   })
 })
@@ -318,6 +321,17 @@ describe('basemap and weather', () => {
     expect(PAPER_INKS.rain.slice(1).some(c => painted.has(c))).toBe(true)
   })
 
+  test('a dry name too long for its region wraps onto a second line, whole, where it used to vanish', () => {
+    const long = { ...map, regions: map.regions.map(r => (r.id === 'checks' ? { ...r, name: 'Dev server and SSR tests' } : r)) }
+    const grid = sheetOf({ repo: 'demo', map: long, files: [...FACTS.lines.keys()], lines: FACTS.lines, weather: null, layers: ALL_LAYERS }, 40, 30)
+    const rows = Array.from({ length: grid.rows }, (_, y) => grid.cells.slice(y * grid.cols, (y + 1) * grid.cols).map(c => c.glyph).join(''))
+    const at = rows.findIndex(r => r.includes('dev server and '))
+
+    expect(at >= 0).toBe(true)
+    expect(rows[at + 1]!.indexOf('ssr tests')).toBe(rows[at]!.indexOf('dev server and'))
+    expect(rows.join('').includes('…')).toBe(false)
+  })
+
   test('Claude Code paints 256 colours inside tmux and wherever COLORTERM never says truecolor', () => {
     expect(colorsOf({ COLORTERM: 'truecolor' })).toBe('truecolor')
     expect(colorsOf({ COLORTERM: 'truecolor', TMUX: '/tmp/tmux-1/default,1,0' })).toBe('256')
@@ -359,5 +373,119 @@ describe('basemap and weather', () => {
 
   test('wrap keeps to the width and ends a cut with an ellipsis', () => {
     expect(wrap('one two three four five six', 9, 2)).toEqual(['one two', 'three fo…'])
+  })
+
+  test('a band keeps a row of its own in a short pane, and a pane too small for every band says so', () => {
+    const six = { ...map, layers: Array.from({ length: 6 }, (_, i) => ({ id: `l${i}`, name: `L${i}`, blurb: '' })), regions: map.regions.map((r, i) => ({ ...r, layer: `l${i % 6}` })).concat([{ ...map.regions[0]!, id: 'x5', layer: 'l5' }, { ...map.regions[0]!, id: 'x4', layer: 'l4' }]) }
+    const files = [...FACTS.lines.keys()]
+
+    for (const rows of [12, 20, 30]) {
+      const layout = layoutOf(six, files, FACTS.lines, 60, rows)
+
+      expect(layout.isCramped).toBe(false)
+      expect(new Set(layout.cells.map(c => c.region.layer)).size).toBe(6)
+      for (const { rect } of layout.cells) expect(rect.y + rect.h <= rows && rect.h >= 1).toBe(true)
+    }
+    expect(layoutOf(six, files, FACTS.lines, 60, 8).isCramped).toBe(true)
+    // a band of two regions needs three columns: one each and the hairline between
+    expect(layoutOf(map, files, FACTS.lines, 2, 30).isCramped).toBe(true)
+    const small = sheetOf({ repo: 'demo', map: six, files, lines: FACTS.lines, weather: null, layers: ALL_LAYERS }, 40, 14)
+
+    expect(small.cells.map(c => c.glyph).join('')).toContain('Widen or heighten')
+  })
+
+  test('the sheet draws only width-1 code points that stay in place: no bidi controls, zero widths or loose accents', () => {
+    for (const ch of ['\u202e', '\u2066', '\u200b', '\ufeff', '\u0301', '\u2028', '\u231a']) expect(codePointOf(ch)).toBe(0x20)
+    for (const ch of ['a', 'é', '─', '▀', '⠿', '●']) expect(codePointOf(ch)).toBe(ch.codePointAt(0)!)
+    const grid = gridOf(4, 1, 0)
+
+    // a decomposed accent composes into one cell
+    write(grid, 0, 0, 'e\u0301x', 1)
+    expect(grid.cells.map(c => c.glyph).join('')).toBe('éx  ')
+  })
+})
+
+describe('git, read as it is', () => {
+  const EMPTY = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
+  /** A repository answering `answers` by argv substring; a key starting with `!` fails with that output. */
+  const repo = (answers: [string, string, number?][]): Run => async argv => {
+    const hit = answers.find(([k]) => argv.join(' ').includes(k))
+
+    return { exitCode: hit?.[2] ?? 0, stdout: hit?.[1] ?? '' }
+  }
+
+  test('a repository with no commits measures its change from the empty tree, and with none says so', async () => {
+    const run = repo([['rev-parse --verify -q HEAD~1', '', 128], ['rev-parse --verify -q HEAD', '', 1], ['hash-object -t tree /dev/null', `${EMPTY}\n`], [`diff --numstat -z --ignore-submodules=dirty ${EMPTY}`, '3\t0\tsrc/a.ts\0']])
+    const refs = await refsOf(run, '/r')
+
+    expect(refs).toEqual({ head: EMPTY, parent: EMPTY, isBorn: false })
+    expect((await currentChange(run, '/r', [], { refs })).changes.map(c => c.path)).toEqual(['src/a.ts'])
+    expect((await currentChange(repo([]), '/r', [], { refs })).base).toEqual({ kind: 'none', label: 'no commits yet' })
+  })
+
+  test("a repository's first commit is measured from the empty tree", async () => {
+    const run = repo([['rev-parse --verify -q HEAD~1', '', 128], ['hash-object -t tree /dev/null', `${EMPTY}\n`]])
+
+    expect(await refsOf(run, '/r')).toEqual({ head: 'HEAD', parent: EMPTY, isBorn: true })
+  })
+
+  test('an untracked file counts once the session made it, by its Write or by any command', async () => {
+    const run = repo([['ls-files -z --others', 'notes.txt\0gen/a.ts\0b.ts\0']])
+    const change = await currentChange(run, '/r', ['b.ts'], { before: new Set(['notes.txt']) })
+
+    expect(change.changes.map(c => [c.path, c.isNew])).toEqual([['gen/a.ts', true], ['b.ts', true]])
+    expect((await currentChange(run, '/r', ['b.ts'])).changes.map(c => c.path)).toEqual(['b.ts'])
+  })
+
+  test('one path git cannot hash costs only its own hash', async () => {
+    const run: Run = async argv => {
+      const paths = argv.slice(argv.indexOf('--') + 1)
+
+      return paths.includes('vendor/lib') ? { exitCode: 128, stdout: '' } : { exitCode: 0, stdout: paths.map(p => `h-${p}\n`).join('') }
+    }
+    const change = (path: string) => ({ path, added: 1, deleted: 0, isNew: false, isDeleted: false })
+    const hashes = await hashesOf(run, '/r', [change('a.ts'), change('vendor/lib'), change('b.ts')])
+
+    expect([...hashes]).toEqual([['a.ts', 'h-a.ts'], ['vendor/lib', UNHASHABLE], ['b.ts', 'h-b.ts']])
+  })
+
+  test('the excerpt reads headers only before a hunk: a deleted file, a name with a space, a removed SQL comment, a new file', async () => {
+    const diff = [
+      'diff --git a/gone.ts b/gone.ts', 'deleted file mode 100644', '--- a/gone.ts', '+++ /dev/null', '@@ -1 +0,0 @@', '-export const a = 1',
+      'diff --git a/my notes.md b/my notes.md', '--- a/my notes.md\t', '+++ b/my notes.md\t', '@@ -1 +1 @@', '-old', '+new',
+      'diff --git a/db/q.sql b/db/q.sql', '--- a/db/q.sql', '+++ b/db/q.sql', '@@ -1,2 +1 @@', '-- a comment', ' select 1',
+    ].join('\n')
+    const fresh = ['diff --git a/src/new.ts b/src/new.ts', 'new file mode 100644', '--- /dev/null', '+++ b/src/new.ts', '@@ -0,0 +1 @@', '+export const b = 2'].join('\n')
+    const run: Run = async argv => (argv.includes('--no-index') ? { exitCode: 1, stdout: fresh } : { exitCode: 0, stdout: diff })
+    const out = await excerptOf(run, '/r', ['gone.ts', 'my notes.md', 'db/q.sql'], ['HEAD'], undefined, ['src/new.ts'])
+
+    expect([...out.keys()]).toEqual(['gone.ts', 'my notes.md', 'db/q.sql', 'src/new.ts'])
+    expect(out.get('db/q.sql')).toBe('@@ -1,2 +1 @@\n-- a comment\n select 1')
+    expect(out.get('src/new.ts')).toContain('+export const b = 2')
+  })
+
+  test('a shared map is held to what a model answer is: clipped, slugged, weighed 1 to 10, and refused when it is no map', () => {
+    const m = sanitizeBasemap({
+      version: 1,
+      layers: [{ id: 'Edge Layer', name: 'Edge', blurb: 'in' }],
+      regions: [
+        { id: 'a', name: 'Alpha\u202e\u200b\tname that runs on past the clip', blurb: 'x', layer: 'edge-layer', paths: ['src/', 7], weight: 99 },
+        { id: 'b', name: 'Beta', blurb: 'y', layer: 'edge-layer', paths: ['lib/'] },
+        { id: 'c', name: 'Gamma', layer: 'nowhere', paths: ['x/'] },
+      ],
+    })
+
+    expect(m?.regions.map(r => [r.id, r.name, r.paths, r.weight])).toEqual([['a', 'Alpha name that runs on p', ['src/'], 10], ['b', 'Beta', ['lib/'], 1]].map(([id, name, paths, w]) => [id, (name as string).slice(0, 24), paths, w]))
+    expect(m?.source).toBe('repo-file')
+    expect(sanitizeBasemap({ version: 1, layers: [{ id: 'a' }], regions: [{ id: 'x', layer: 'a', paths: ['x/'] }] })).toBe(null)
+    expect(sanitizeBasemap({ version: 2, layers: [], regions: [] })).toBe(null)
+    expect(sanitizeBasemap('nope')).toBe(null)
+  })
+
+  test('a caption and a scope note are cut to 40 characters', () => {
+    const long = 'x'.repeat(80)
+
+    expect(parseGistReply(JSON.stringify({ regions: [{ id: 'a', what: long }] }), new Set(['a']))?.get('a')?.length).toBe(40)
+    expect(parseScopeReply(JSON.stringify({ unasked: [{ path: 'a.ts', why: long }] }), new Set(['a.ts']))?.get('a.ts')?.length).toBe(40)
   })
 })

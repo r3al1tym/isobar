@@ -1,3 +1,4 @@
+import { GIT_READ_ONLY } from './git'
 import { graphOf, reachOf, type Graph, type Reach } from './graph'
 import { isPython } from './imports'
 import type { Change, Facts, Run } from './types'
@@ -40,7 +41,7 @@ type Line = { code: string; indent: number; isQuiet: boolean; isImport: boolean;
 /** A declaration's span, its header (what callers see) and its code (what it does), whitespace folded. */
 type Decl = { name: string; owner?: string; start: number; end: number; header: string; code: string; members: Decl[]; isClass: boolean; isPrivate: boolean }
 
-/** The most declarations a file is read for; past it the file is read whole. */
+/** The most lines a file may have and still be read by declaration; past it the file is read whole. */
 const MAX_LINES = 20_000
 /** The most changed files read declaration by declaration in one refresh. */
 const MAX_FILES = 40
@@ -461,21 +462,41 @@ function wordsOf(touches: readonly Touch[], decls: readonly Decl[], isPrivate: (
   return { words: kept, members: kept.filter(w => members.has(w)) }
 }
 
-/** `git diff -U0` hunks: per file, the 1-based lines removed from the old side and added on the new. */
+/**
+ * A `---` or `+++` header's path, its side's `a/` or `b/` taken off; `/dev/null` for a side that
+ * is not there. Git ends the name with a tab when it holds a space, and the tab is cut first.
+ */
+export function headerPath(line: string): string {
+  const name = line.slice(4).replace(/\t$/, '')
+
+  return name === '/dev/null' ? name : name.replace(line.startsWith('---') ? /^a\// : /^b\//, '')
+}
+
+/**
+ * `git diff -U0` hunks: per file, the 1-based lines removed from the old side and added on the new.
+ * Headers are read only between `diff --git` and the first `@@`, so a removed `-- ` line or an
+ * added `++ ` line in a hunk stays a line.
+ */
 export function hunksOf(diff: string): Map<string, { removed: number[]; added: number[] }> {
   const out = new Map<string, { removed: number[]; added: number[] }>()
   let at: { removed: number[]; added: number[] } | null = null
   let from = ''
+  let isHeader = false
 
   for (const line of diff.split('\n')) {
-    if (line.startsWith('--- ')) from = line.slice(4).replace(/^a\//, '')
-    else if (line.startsWith('+++ ')) {
-      const to = line.slice(4).replace(/^b\//, '')
+    if (line.startsWith('diff --git ')) {
+      isHeader = true
+      at = null
+      from = ''
+    } else if (isHeader && line.startsWith('--- ')) from = headerPath(line)
+    else if (isHeader && line.startsWith('+++ ')) {
+      const to = headerPath(line)
       const path = to === '/dev/null' ? from : to
 
       at = out.get(path) ?? { removed: [], added: [] }
       out.set(path, at)
     } else if (line.startsWith('@@') && at !== null) {
+      isHeader = false
       const m = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(line)
 
       if (m === null) continue
@@ -541,7 +562,7 @@ export async function readChange(
   refs: { from: string; to?: string },
   graph: Graph = graphOf(facts.edges),
 ): Promise<ChangeRead> {
-  const git = (...args: string[]) => run(['git', '-C', root, ...args])
+  const git = (...args: string[]) => run(['git', '-C', root, ...GIT_READ_ONLY, ...args])
   const from = refs.from
   const to = refs.to === undefined ? [] : [refs.to]
   const readable = changes

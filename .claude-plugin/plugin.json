@@ -23,7 +23,7 @@
     "panel": {
       "type": "string",
       "title": "Pane",
-      "description": "auto opens the pane when the session's first edit lands (on a terminal wide enough to dock it); command opens it only on /isobar.",
+      "description": "auto opens the pane by itself once the repository has uncommitted changes, at session start or on the session's first edit (from 144 columns wide; /isobar opens it at any width); command opens it only on /isobar.",
       "default": "auto",
       "options": [
         "auto",
@@ -43,7 +43,7 @@
     "gist": {
       "type": "string",
       "title": "Gist",
-      "description": "on: once a turn that changed files ends (and when the pane shows a commit), a small model reads the diff of each changed region and captions what the change does there in a few words, under the region's name. It sends the changed paths with their line counts and touched declaration names, and up to 400 diff lines, to the small model; never your requests. off: no captions and no call.",
+      "description": "on: when a session starts, after each turn that changes files, and when the pane shows a commit, a small model reads the diff of each changed region (every uncommitted edit, including ones made before the session, or the last commit on a clean tree) and captions what the change does there in a few words, under the region's name. It sends the changed paths with their added and deleted line counts and touched declaration names, and up to 400 diff lines, to the small model; never your requests. off: no captions and no call.",
       "default": "on",
       "options": [
         "on",

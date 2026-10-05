@@ -41,16 +41,23 @@ const fixed = (x: number | null | undefined, places = 3) => (x === null || x ===
 const ms = (x: number | undefined) => (x === undefined ? '–' : x < 10 ? x.toFixed(1) : String(Math.round(x)))
 const mc = perf?.machine
 
+/** One refresh: the medians of its timed parts summed (the facts, the change read by declaration, the weather, the sheet). */
+const refreshMs = (p: any): number | undefined => {
+  const parts = p ? [p.factsMs, p.readMs, p.weatherMs, p.sheetMs] : []
+
+  return parts.length > 0 && parts.every(x => typeof x === 'number') ? parts.reduce((a, b) => a + b, 0) : undefined
+}
+
 const table = [
-  '| repo | files (mapped) | edges | facts ms | weather ms | sheet ms | model map s | import precision / recall | dependents error (median, differ) | EXPECTED coverage / precision / recall / false alarms |',
-  '|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|',
+  '| repo | files (mapped) | edges | facts ms | read ms | weather ms | sheet ms | refresh ms | model map s | import precision / recall | dependents error (median, differ) | EXPECTED coverage / precision / recall / false alarms |',
+  '|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|',
   ...rows.map(({ repo, perf: p, imports: i, history: h }) => {
     const mm = p?.model ? `${p.model.seconds}${p.model.accepted ? '' : ' (rejected)'}` : '–'
     const imp = i ? `${ratio(i.agreed, i.isobarEdges)} / ${ratio(i.agreed, i.compilerEdges)}` : '–'
     const dep = i ? `${fixed(i.dependents.medianRelativeError)} (${i.dependents.differ}/${i.dependents.files})` : '–'
     const exp = h ? [h.coverage, h.precision, h.recall, h.falseAlarms].map(x => fixed(x, 2)).join(' / ') : '–'
 
-    return `| ${repo} | ${p ? `${p.trackedFiles} (${p.textFiles})` : '–'} | ${p?.edges ?? '–'} | ${ms(p?.factsMs)} | ${ms(p?.weatherMs)} | ${ms(p?.sheetMs)} | ${mm} | ${imp} | ${dep} | ${exp} |`
+    return `| ${repo} | ${p ? `${p.trackedFiles} (${p.textFiles})` : '–'} | ${p?.edges ?? '–'} | ${ms(p?.factsMs)} | ${ms(p?.readMs)} | ${ms(p?.weatherMs)} | ${ms(p?.sheetMs)} | ${ms(refreshMs(p))} | ${mm} | ${imp} | ${dep} | ${exp} |`
   }),
 ]
 
@@ -109,15 +116,19 @@ const reachCauses = rows.flatMap(({ repo, uses: u }) => {
 
 const span = (xs: number[]) => (Math.min(...xs) === Math.max(...xs) ? `${Math.min(...xs)}` : `${Math.min(...xs)}–${Math.max(...xs)}`)
 const frameTable = [
-  '| repo | files | regions per draw | redraw ARI | a year-old map: files then → now, kept vs fresh ARI, layout IoU | resize IoU, lowest |',
+  '| repo | files | regions per draw | redraw ARI | a year-old map: files then → now, new files, kept vs fresh ARI, layout IoU | resize IoU, lowest |',
   '|---|--:|--:|--:|--:|--:|',
   ...(frame?.rows ?? []).map((f: any) =>
-    `| ${f.repo} | ${f.files} | ${f.regions.join(', ')} | ${span(f.redrawARI)} | ${f.yearOld.files}, ${span(f.yearOld.keptVsFreshARI)}, ${f.yearOld.layoutIoU} | ${Math.min(...Object.values(f.resize as Record<string, number>))} |`),
+    `| ${f.repo} | ${f.files} | ${f.regions.join(', ')} | ${span(f.redrawARI)} | ${f.yearOld.files}, ${f.yearOld.newFiles} new, ${span(f.yearOld.keptVsFreshARI)}, ${f.yearOld.layoutIoU} | ${Math.min(...Object.values(f.resize as Record<string, number>))} |`),
 ]
 
 const notes = [
-  `Edges are what \`gatherFacts\` finds. Times are the median of 5 runs after one warm-up, in one Node process, on warm git caches; weather and sheet are for the HEAD commit's own change over a heuristic basemap. The laptop was running other work: the 1-minute load average was ${mc?.loadAverage ?? '–'} when the timings started.`,
-  `The model map is one \`claude -p --model opus\` call fed \`basemapPrompt\` on stdin, as scripts/preview.ts asks, timed through \`parseBasemapReply\` and \`finishBasemap\`: one sample per repo, so it moves with model load. \`claude -p\` alone took ${model?.cliBaselineSeconds ?? '–'} s to answer one word here (median of 3); the mod asks through \`$.model.complete\` and skips that start-up. ${rows.filter(r => r.perf?.model).map(r => `${r.repo}: ${r.perf.model.units} units in the prompt, ${r.perf.model.regions} regions back`).join('; ')}. Replies are kept in \`results/model-map-<repo>.txt\`.`,
+  `Edges are what \`gatherFacts\` finds. Times are the median of 5 runs after one warm-up, in one Node process, on warm git caches; read (\`readChange\`, the change read by declaration), weather and sheet are for the HEAD commit's own change over a heuristic basemap, and refresh is facts + read + weather + sheet. The laptop was running other work: the 1-minute load average was ${mc?.loadAverage ?? '–'} when the timings started.`,
+  ...(rows.some(r => r.perf?.model)
+    ? [
+        `The model map is one \`claude -p --model opus\` call fed \`basemapPrompt\` on stdin, as scripts/preview.ts asks, timed through \`parseBasemapReply\` and \`finishBasemap\`: one sample per repo, so it moves with model load.${model?.cliBaselineSeconds == null ? '' : ` \`claude -p\` alone took ${model.cliBaselineSeconds} s to answer one word here (median of 3); the mod asks through \`$.model.complete\` and skips that start-up.`} ${rows.filter(r => r.perf?.model).map(r => `${r.repo}: ${r.perf.model.units} units in the prompt, ${r.perf.model.regions} regions back`).join('; ')}. Replies are kept in \`results/model-map-<repo>.txt\`.`,
+      ]
+    : []),
   `Files are tracked files, with the files isobar maps in brackets: every text file (\`git grep -I -c -e ''\`) and the empty JavaScript, TypeScript and Python files an import can name. Binary files, symlinks and other empty files stay off the map.`,
   'JS/TS ground truth: `ts.preProcessFile` + `ts.resolveModuleName` with the nearest tsconfig.json or jsconfig.json, with `allowJs` and `resolveJsonModule` forced on so a .js or .json target counts. Sources are tracked .ts/.tsx/.js/.jsx/.mjs/.cjs/.mts/.cts files minus .d.ts and *.min.js; targets are the same plus .json. No directory is skipped. Clones are blobless with no node_modules, so a workspace package resolves only where tsconfig `paths` maps it.',
   'Python ground truth: grimp, both ends inside the package. grimp records `from pkg import submodule` as an import of the submodule only, so isobar\'s extra edge to `pkg/__init__.py` counts as false even though Python runs that file.',
@@ -125,7 +136,7 @@ const notes = [
   ...(uses
     ? [`Reach by declaration (bench/uses.mts): per repo a seeded sample of the latest ${uses.window} non-merge commits touching 1 to 15 JS/TS or Python files (${uses.perRepo}, fewer where the table says), each read in a detached worktree. Truth for JS/TS is the TypeScript language service's \`findReferences\` over the nearest tsconfig or jsconfig (allowJs on), widened by the files isobar's graph says depend on the changed file; for Python, jedi's \`get_references\` over the repo. A file counts when it references a touched declaration outside its imports. Searches over ${uses.timeoutSeconds} s leave their file out. readChange is timed once after a warm-up call that fetches the parent commit's blobs.`]
     : []),
-  `EXPECTED backtest: the latest ${history?.commits} non-merge commits touching 2 to 40 files; history is the ${history?.history} non-merge commits before each (bulk commits over 40 files dropped); half the files given, half hidden, by a seeded shuffle; \`expectedOf(history, given, () => true, ${history?.minShare})\`, top ${history?.top}; mean over seeds ${history?.seeds?.join(', ')}. Coverage: share of commits flagged. Precision: flags that were hidden files. Recall: hidden files flagged. False alarms: share of complete commits (every file given) that still get a flag.`,
+  `EXPECTED backtest: the latest ${history?.commits} non-merge commits touching 2 to 40 files; history is the ${history?.history} non-merge commits before each (bulk commits over 40 files dropped); half the files given, half hidden, by a seeded shuffle; \`expectedOf(history, given, () => true, ${history?.minShare}, ${history?.minTogether}, ${history?.minLift})\`, top ${history?.top}; mean over seeds ${history?.seeds?.join(', ')}. Coverage: share of commits flagged. Precision: flags that were hidden files. Recall: hidden files flagged. False alarms: share of complete commits (every file given) that still get a flag.`,
 ]
 
 const md = [

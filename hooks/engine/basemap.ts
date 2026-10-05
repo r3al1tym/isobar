@@ -124,7 +124,8 @@ export function basemapPrompt(repo: string, units: readonly Unit[]): string {
 }
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'region'
-const clip = (s: unknown, n: number) => (typeof s === 'string' ? s.trim().replace(/\s+/g, ' ').slice(0, n) : '')
+/** A string cut to `n` characters, its control and format characters out (a tab or newline becomes a space), whitespace folded. */
+const clip = (s: unknown, n: number) => (typeof s === 'string' ? s.replace(/\p{C}/gu, c => (/\s/.test(c) ? ' ' : '')).trim().replace(/\s+/g, ' ').slice(0, n) : '')
 
 /** The model's answer as layers and regions, or null when it is not usable. */
 export function parseBasemapReply(text: string, units?: readonly Unit[]): { layers: Layer[]; regions: Region[] } | null {
@@ -171,6 +172,39 @@ export function parseBasemapReply(text: string, units?: readonly Unit[]): { laye
   })
 
   return regions.length >= 2 ? { layers: layers.filter(l => regions.some(r => r.layer === l.id)), regions } : null
+}
+
+/**
+ * A basemap from outside the model, such as a repository's own `.isobar/map.json`, held to what
+ * the model's answer is held to: ids slugged, names and blurbs clipped, weights 1 to 10, order
+ * kept. A region on no known layer or with no paths is dropped; null when fewer than two remain
+ * or the file is no basemap at all.
+ */
+export function sanitizeBasemap(x: unknown): Basemap | null {
+  const m = x as Record<string, unknown> | null
+
+  if (m === null || typeof m !== 'object' || m.version !== 1 || !Array.isArray(m.layers) || !Array.isArray(m.regions)) return null
+  const fields = (o: unknown): Record<string, unknown> => (o !== null && typeof o === 'object' ? (o as Record<string, unknown>) : {})
+  const layers: Layer[] = m.layers.slice(0, MAX_LAYERS).map(fields).map(l => ({ id: slug(clip(l.id, 40) || clip(l.name, 40)), name: clip(l.name, 22), blurb: clip(l.blurb, 40) }))
+  const ids = new Set(layers.map(l => l.id))
+  // room for "Everything else" past the model's limit
+  const regions: Region[] = m.regions
+    .slice(0, MAX_REGIONS + 1)
+    .map(fields)
+    .map(r => ({
+      id: slug(clip(r.id, 40) || clip(r.name, 40)),
+      name: clip(r.name, 24),
+      blurb: clip(r.blurb, 48),
+      layer: slug(clip(r.layer, 40)),
+      paths: Array.isArray(r.paths) ? r.paths.filter((p): p is string => typeof p === 'string') : [],
+      weight: Math.max(1, Math.min(10, Math.round(Number(r.weight)) || 1)),
+    }))
+    .filter(r => ids.has(r.layer) && r.paths.length > 0)
+
+  if (regions.length < 2) return null
+  const source = m.source === 'model' || m.source === 'heuristic' ? m.source : 'repo-file'
+
+  return { version: 1, repo: clip(m.repo, 80), head: clip(m.head, 64), builtAt: clip(m.builtAt, 40), source, layers, regions }
 }
 
 const title = (s: string) => s.replace(/^\./, '').replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || 'Root'

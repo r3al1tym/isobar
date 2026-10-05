@@ -2,14 +2,14 @@
 
 Machine: Intel(R) Core(TM) Ultra 7 265H, 16 logical CPUs, 43 GB, Ubuntu 24.04.5 LTS, Linux 6.18.33.2-microsoft-standard-WSL2; Node 24.14.0, git version 2.43.0, Claude Code 2.1.287.
 
-| repo | files (mapped) | edges | facts ms | weather ms | sheet ms | model map s | import precision / recall | dependents error (median, differ) | EXPECTED coverage / precision / recall / false alarms |
-|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|
-| express | 214 (211) | 153 | 29 | 0.2 | 4.3 | – | 1.000 / 1.000 | 0.000 (0/20) | 0.25 / 0.79 / 0.15 / 0.13 |
-| excalidraw | 1308 (1018) | 3698 | 83 | 2.6 | 10 | – | 0.997 / 0.999 | 0.017 (17/20) | 0.34 / 0.38 / 0.07 / 0.44 |
-| vite | 2841 (2736) | 2232 | 90 | 1.5 | 15 | 48.4 | 0.946 / 0.998 | 0.000 (0/20) | 0.32 / 0.62 / 0.13 / 0.33 |
-| vscode | 19916 (19547) | 135968 | 1322 | 61 | 238 | – | 0.999 / 1.000 | 0.000 (9/20) | 0.47 / 0.47 / 0.10 / 0.44 |
-| flask | 236 (230) | 195 | 44 | 0.2 | 2.8 | – | 0.960 / 1.000 | 0.000 (0/20) | 0.36 / 0.58 / 0.16 / 0.36 |
-| django | 7083 (5675) | 10157 | 413 | 2.0 | 20 | 36 | 0.919 / 1.000 | 0.000 (2/20) | 0.16 / 0.46 / 0.04 / 0.14 |
+| repo | files (mapped) | edges | facts ms | read ms | weather ms | sheet ms | refresh ms | model map s | import precision / recall | dependents error (median, differ) | EXPECTED coverage / precision / recall / false alarms |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| express | 214 (211) | 153 | 29 | 0.0 | 0.2 | 4.3 | 33 | – | 1.000 / 1.000 | 0.000 (0/20) | 0.25 / 0.79 / 0.15 / 0.13 |
+| excalidraw | 1308 (1018) | 3698 | 83 | 203 | 2.6 | 10 | 298 | – | 0.997 / 0.999 | 0.017 (17/20) | 0.34 / 0.38 / 0.07 / 0.44 |
+| vite | 2841 (2736) | 2232 | 90 | 0.4 | 1.5 | 15 | 107 | 48.4 | 0.946 / 0.998 | 0.000 (0/20) | 0.32 / 0.62 / 0.13 / 0.33 |
+| vscode | 19916 (19547) | 135968 | 1322 | 180 | 61 | 238 | 1801 | – | 0.999 / 1.000 | 0.000 (9/20) | 0.47 / 0.47 / 0.10 / 0.44 |
+| flask | 236 (230) | 195 | 44 | 20 | 0.2 | 2.8 | 67 | – | 0.960 / 1.000 | 0.000 (0/20) | 0.36 / 0.58 / 0.16 / 0.36 |
+| django | 7083 (5675) | 10157 | 413 | 1.6 | 2.0 | 20 | 437 | 36 | 0.919 / 1.000 | 0.000 (2/20) | 0.16 / 0.46 / 0.04 / 0.14 |
 
 ## Import graph: where isobar and the compiler disagree
 
@@ -158,22 +158,22 @@ Rain is the files the weather reaches as a share of the mapped files, per commit
 
 Basemaps drawn by `claude -p --model opus`, 3 at the pinned commit and one a year earlier (bench/frame.mts). ARI is the adjusted Rand index over every file's region: 1 is the same grouping, 0 is chance. The year-old map is kept and completed at the pinned commit, as the pane keeps a map, and compared with each fresh draw; layout IoU is how much of each region's rectangle stays put once the year's new files join it, and resize IoU the same across pane sizes.
 
-| repo | files | regions per draw | redraw ARI | a year-old map: files then → now, kept vs fresh ARI, layout IoU | resize IoU, lowest |
+| repo | files | regions per draw | redraw ARI | a year-old map: files then → now, new files, kept vs fresh ARI, layout IoU | resize IoU, lowest |
 |---|--:|--:|--:|--:|--:|
-| excalidraw | 1018 | 16, 19, 16 | 0.96–0.98 | 860 → 1018, 0.93–0.94, 1 | 0.99 |
-| vite | 2736 | 14, 12, 12 | 0.54–0.87 | 2350 → 2736, 0.53–0.9, 1 | 0.99 |
-| flask | 230 | 15, 14, 13 | 0.89–0.97 | 228 → 230, 0.92–0.97, 1 | 0.99 |
+| excalidraw | 1018 | 16, 19, 16 | 0.96–0.98 | 860 → 1018, 184 new, 0.93–0.94, 1 | 0.99 |
+| vite | 2736 | 14, 12, 12 | 0.54–0.87 | 2350 → 2736, 532 new, 0.53–0.9, 1 | 0.99 |
+| flask | 230 | 15, 14, 13 | 0.89–0.97 | 228 → 230, 2 new, 0.92–0.97, 1 | 0.99 |
 
 ## How it was measured
 
-- Edges are what `gatherFacts` finds. Times are the median of 5 runs after one warm-up, in one Node process, on warm git caches; weather and sheet are for the HEAD commit's own change over a heuristic basemap. The laptop was running other work: the 1-minute load average was 2.6 when the timings started.
+- Edges are what `gatherFacts` finds. Times are the median of 5 runs after one warm-up, in one Node process, on warm git caches; read (`readChange`, the change read by declaration), weather and sheet are for the HEAD commit's own change over a heuristic basemap, and refresh is facts + read + weather + sheet. The laptop was running other work: the 1-minute load average was 2.6 when the timings started.
 - The model map is one `claude -p --model opus` call fed `basemapPrompt` on stdin, as scripts/preview.ts asks, timed through `parseBasemapReply` and `finishBasemap`: one sample per repo, so it moves with model load. `claude -p` alone took 10.5 s to answer one word here (median of 3); the mod asks through `$.model.complete` and skips that start-up. vite: 120 units in the prompt, 11 regions back; django: 28 units in the prompt, 8 regions back. Replies are kept in `results/model-map-<repo>.txt`.
 - Files are tracked files, with the files isobar maps in brackets: every text file (`git grep -I -c -e ''`) and the empty JavaScript, TypeScript and Python files an import can name. Binary files, symlinks and other empty files stay off the map.
 - JS/TS ground truth: `ts.preProcessFile` + `ts.resolveModuleName` with the nearest tsconfig.json or jsconfig.json, with `allowJs` and `resolveJsonModule` forced on so a .js or .json target counts. Sources are tracked .ts/.tsx/.js/.jsx/.mjs/.cjs/.mts/.cts files minus .d.ts and *.min.js; targets are the same plus .json. No directory is skipped. Clones are blobless with no node_modules, so a workspace package resolves only where tsconfig `paths` maps it.
 - Python ground truth: grimp, both ends inside the package. grimp records `from pkg import submodule` as an import of the submodule only, so isobar's extra edge to `pkg/__init__.py` counts as false even though Python runs that file.
 - "dependents error" is the median of |isobar − compiler| / compiler over `dependentsOf` for the 20 files the compiler graph says are imported most, then how many of the 20 differ at all.
 - Reach by declaration (bench/uses.mts): per repo a seeded sample of the latest 300 non-merge commits touching 1 to 15 JS/TS or Python files (60, fewer where the table says), each read in a detached worktree. Truth for JS/TS is the TypeScript language service's `findReferences` over the nearest tsconfig or jsconfig (allowJs on), widened by the files isobar's graph says depend on the changed file; for Python, jedi's `get_references` over the repo. A file counts when it references a touched declaration outside its imports. Searches over 20 s leave their file out. readChange is timed once after a warm-up call that fetches the parent commit's blobs.
-- EXPECTED backtest: the latest 300 non-merge commits touching 2 to 40 files; history is the 400 non-merge commits before each (bulk commits over 40 files dropped); half the files given, half hidden, by a seeded shuffle; `expectedOf(history, given, () => true, 0.6)`, top 3; mean over seeds 1, 2, 3. Coverage: share of commits flagged. Precision: flags that were hidden files. Recall: hidden files flagged. False alarms: share of complete commits (every file given) that still get a flag.
+- EXPECTED backtest: the latest 300 non-merge commits touching 2 to 40 files; history is the 400 non-merge commits before each (bulk commits over 40 files dropped); half the files given, half hidden, by a seeded shuffle; `expectedOf(history, given, () => true, 0.6, 3, 4)`, top 3; mean over seeds 1, 2, 3. Coverage: share of commits flagged. Precision: flags that were hidden files. Recall: hidden files flagged. False alarms: share of complete commits (every file given) that still get a flag.
 
 ## Repositories
 

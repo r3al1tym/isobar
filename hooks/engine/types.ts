@@ -1,4 +1,4 @@
-/** What a host command answers: the engine's `$.process.run`, or Node's in the preview script. */
+/** What a host command answers, its output whole: the engine's `$.process.spawn`, or Node's in the preview script. */
 export type RunResult = { exitCode: number; stdout: string }
 
 /** Runs a command by argv with no shell. */
@@ -45,8 +45,8 @@ export type Change = {
   isDeleted: boolean
 }
 
-/** What the weather is measured against. */
-export type Base = { kind: 'uncommitted' | 'commit'; label: string }
+/** What the weather is measured against: the uncommitted edits, the last commit, or nothing in a repository with no commits yet. */
+export type Base = { kind: 'uncommitted' | 'commit' | 'none'; label: string }
 
 /** The repository facts a basemap and the weather are computed from. */
 export type Facts = {

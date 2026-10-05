@@ -1,11 +1,12 @@
 /**
  * Every colour the pane paints. The terminal's Raster paints 4 bits a channel
  * (each channel a multiple of 0x11), so each set is chosen on that grid: a colour
- * off it would be snapped channel by channel and drift in hue. The radar ramps walk
- * that grid in OKLab steps of 0.03 to 0.06, lightness always moving one way, so
- * no band jumps against its neighbour. As on a weather radar, the change storms red and its
- * reach falls as green rain, here a sage that sits with the sepia inks, so what changed and
- * what it touches read apart at a glance.
+ * off it would be snapped channel by channel and drift in hue. The radar and rain ramps
+ * walk that grid in OKLab steps of 0.02 to 0.08, mostly 0.04 to 0.06, lightness always
+ * moving one way; the night radar's step from bin 5 to bin 6 (0.11) is the one wider.
+ * As on a weather radar, the change storms red and its reach falls as green rain, here a
+ * sage that sits with the sepia inks, so what changed and what it touches read apart at a
+ * glance.
  *
  * Where Claude Code paints 256 colours (inside tmux, or where COLORTERM never says
  * truecolor) it moves each colour onto xterm's palette, and the cream paper lands on

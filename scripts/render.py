@@ -4,6 +4,7 @@ Half blocks and box-drawing lines are drawn as geometry, as terminals do; text u
 monospace font. A dark margin stands in for the terminal around the docked pane.
 """
 import json
+import os
 import sys
 
 from PIL import Image, ImageDraw, ImageFont
@@ -11,7 +12,24 @@ from PIL import Image, ImageDraw, ImageFont
 CW, CH = 10, 21
 MARGIN = 24
 DOCK = (38, 38, 38)
-FONT = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf', 16)
+
+
+def font():
+    """The first monospace font there is: $ISOBAR_FONT, DejaVu Sans Mono (Linux), Menlo (macOS), DejaVu by name, then Pillow's own.
+
+    Text is drawn one glyph a cell, so any monospace face keeps the grid.
+    """
+    for path in (os.environ.get('ISOBAR_FONT'), '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf', '/System/Library/Fonts/Menlo.ttc', 'DejaVuSansMono.ttf'):
+        if not path:
+            continue
+        try:
+            return ImageFont.truetype(path, 16)
+        except OSError:
+            pass
+    return ImageFont.load_default(size=16)
+
+
+FONT = font()
 
 # A preview snaps colours to 4 bits a channel, as the Raster does; a live capture is already snapped.
 SNAP = len(sys.argv) < 4 or sys.argv[3] != '0'

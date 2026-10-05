@@ -97,6 +97,15 @@ describe('git output for declarations', () => {
     expect([...hunksOf(diff)]).toEqual([['a.ts', { removed: [2], added: [2, 3, 11] }], ['gone.ts', { removed: [1, 2], added: [] }]])
   })
 
+  test('a header is read only before the first hunk, and a name with a space loses the tab git ends it with', () => {
+    const diff = [
+      'diff --git a/my app.ts b/my app.ts', '--- a/my app.ts\t', '+++ b/my app.ts\t', '@@ -3,2 +3 @@', '-- a.lua comment', '-++ x', '+y',
+      'diff --git a/b.ts b/b.ts', '--- a/b.ts', '+++ b/b.ts', '@@ -1 +1 @@', '-p', '+q',
+    ].join('\n')
+
+    expect([...hunksOf(diff)]).toEqual([['my app.ts', { removed: [3, 4], added: [3] }], ['b.ts', { removed: [1], added: [1] }]])
+  })
+
   test('texts come back line by line, a ref prefix taken off', () => {
     expect([...textsOf('HEAD:a.ts\x001\x00one\nHEAD:a.ts\x003\x00three\r\n', 'HEAD')]).toEqual([['a.ts', ['one', '', 'three']]])
   })
@@ -115,7 +124,7 @@ describe('users', () => {
   const after = ['export function foo(a: number) {', '  return a + 2', '}']
   const rows = (lines: string[], prefix = '') => lines.map((t, i) => `${prefix}a.ts\0${i + 1}\0${t}\n`).join('')
   const run: Run = async argv => {
-    const args = argv.slice(3).join(' ')
+    const args = argv.slice(5).join(' ')
     const stdout = args.includes('diff -U0')
       ? 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -2 +2 @@\n-  return a + 1\n+  return a + 2\n'
       : args.startsWith('grep -z -n -I -e  HEAD')
@@ -141,7 +150,7 @@ describe('users', () => {
 
   test('a name is coined when the added lines bring an identifier the file never had, in code or in a string', async () => {
     const coin: Run = async argv => {
-      const args = argv.slice(3).join(' ')
+      const args = argv.slice(5).join(' ')
       const stdout = args.includes('diff -U0')
         ? 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -2 +2 @@\n-  return a + 1\n+  return a + cfg["MAX_RETRY_COUNT"] + helperFn(a) + total\n'
         : args.startsWith('grep -z -n -I -e  HEAD')

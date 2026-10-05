@@ -15,6 +15,8 @@ export type SheetInput = {
   layers: Layers
   /** Shown in place of the forecast while something is being worked out. */
   status?: string
+  /** A quiet word on the map itself, set into the frame's top edge: what it is drawn from, when that is worth knowing. */
+  note?: string
   /** Warm paper (the default), or the terminal's own near-black. */
   ground?: 'paper' | 'night'
   /** how many colours the terminal paints; 256 prints from xterm's own palette */
@@ -84,13 +86,15 @@ export function sheetOf(input: SheetInput, cols: number, rows: number): Grid {
   const frame = { x: side, y: top, w: cols - 2 * side, h: (roomy ? rows - 3 : rows - 1) - top }
 
   title(grid, input.repo, w, frame)
-  if (map === null || frame.w < 24 || frame.h < 8) {
-    centred(grid, input.status ?? 'Reading the repository…')
+  const layout = map === null || frame.w < 24 || frame.h < 8 ? null : layoutOf(map, input.files, input.lines, frame.w - 2, frame.h - 2)
+
+  if (map === null || layout === null || layout.isCramped) {
+    centred(grid, input.status ?? (map === null ? 'Reading the repository…' : 'Widen or heighten the pane to see the map'))
     return quantize(grid)
   }
   border(grid, frame)
+  if (input.note !== undefined && input.note !== '' && frame.w > 8) write(grid, frame.x + 2, frame.y, ` ${fit(input.note, frame.w - 6)} `, inks.faint)
   const sheet: Sheet = { ...gridOf(frame.w - 2, frame.h - 2, inks.paper), inks }
-  const layout = layoutOf(map, input.files, input.lines, sheet.cols, sheet.rows)
   const field = fieldOf(layout, w, input.layers, `${map.head}:${w?.cells.map(c => c.path).join('|') ?? ''}`)
 
   paint(sheet, field, 0, 0)
@@ -144,7 +148,7 @@ function title(grid: Sheet, repo: string, w: Weather | null, f: Rect) {
 
   write(grid, x, row, line, grid.inks.faint)
   write(grid, x, row, line.slice(0, name.length), grid.inks.muted)
-  const side = w?.base.kind === 'commit' ? `last commit ${w.base.label.split(' ')[0]}` : w === null ? '' : turnsOf(w.cells)
+  const side = w?.base.kind === 'commit' ? `last commit ${w.base.label.split(' ')[0]}` : w?.base.kind === 'none' ? w.base.label : w === null ? '' : turnsOf(w.cells)
 
   if (side !== '' && x + line.length + 3 < f.x + f.w - side.length) write(grid, f.x + f.w - side.length, row, side, grid.inks.faint)
 }
@@ -275,20 +279,23 @@ function names(grid: Sheet, layout: Layout, weather: Weather | null, layers: Lay
     const room = rect.w - 2
 
     if (room < 4) continue
-    if (!isWet) {
-      // a dry name is shown whole or not at all
-      // (where rain from a neighbour crosses it, each letter takes that bin's hairline ink, as faint against it)
-      if (name.length <= room) {
-        for (let i = 0; i < name.length; i++) {
-          const ground = groundOf(grid, rect.x + 1 + i, rect.y)
-          const bin = binOf(grid, ground)
+    const lines = wrap(name, room, rect.h >= 6 ? 2 : 1)
 
-          put(grid, rect.x + 1 + i, rect.y, { glyph: name[i], fg: bin === 0 ? g.nameDry : lineOf(grid, ground) ?? g.nameDry, bg: ground })
-        }
+    if (!isWet) {
+      // a dry name is shown whole, on two lines where one is too narrow, or not at all
+      // (where rain from a neighbour crosses it, each letter takes that bin's hairline ink, as faint against it)
+      if (lines.join(' ') === name.split(/\s+/).filter(Boolean).join(' ')) {
+        lines.forEach((line, k) => {
+          for (let i = 0; i < line.length; i++) {
+            const ground = groundOf(grid, rect.x + 1 + i, rect.y + k)
+            const bin = binOf(grid, ground)
+
+            put(grid, rect.x + 1 + i, rect.y + k, { glyph: line[i], fg: bin === 0 ? g.nameDry : lineOf(grid, ground) ?? g.nameDry, bg: ground })
+          }
+        })
       }
       continue
     }
-    const lines = wrap(name, room, rect.h >= 6 ? 2 : 1)
 
     lines.forEach((line, k) => text(grid, rect.x + 1, rect.y + k, line, isChanged ? g.ink : g.muted))
     // EXPECTED names the region a ring is drawn in, so badge and ring always come together
@@ -356,33 +363,30 @@ const BRAILLE = [
 ]
 
 /**
- * History's forecast: two dashed contours around each file history expected, drawn in
- * braille so they read as fine ink lines over the blocky radar, never as rain.
+ * History's forecast: one dashed contour around each file history expected, drawn in
+ * braille so it reads as a fine ink line over the blocky radar, never as rain.
  */
 function contours(grid: Sheet, field: Field, layout: Layout, x0: number, y0: number) {
   const bits = new Map<number, number>()
+  const rx = 5.5
+  const ry = 2.6
+  const steps = Math.ceil(2 * Math.PI * rx * 8)
 
   for (const ring of field.rings) {
-    for (const scale of [1]) {
-      const rx = 5.5 * scale
-      const ry = 2.6 * scale
-      const steps = Math.ceil(2 * Math.PI * rx * 8)
+    for (let s = 0; s < steps; s++) {
+      const a = (s / steps) * Math.PI * 2
 
-      for (let s = 0; s < steps; s++) {
-        const a = (s / steps) * Math.PI * 2
+      if (Math.floor((a * rx) / 1.1) % 3 === 2) continue
+      const cx = ring.x + Math.cos(a) * rx
+      const cy = ring.y / 2 + Math.sin(a) * ry
+      const col = Math.floor(cx)
+      const row = Math.floor(cy)
 
-        if (Math.floor((a * rx) / 1.1) % 3 === 2) continue
-        const cx = ring.x + Math.cos(a) * rx
-        const cy = ring.y / 2 + Math.sin(a) * ry
-        const col = Math.floor(cx)
-        const row = Math.floor(cy)
+      if (col < 0 || row < 0 || col >= layout.cols || row >= layout.rows) continue
+      const sub = BRAILLE[Math.min(1, Math.floor((cx - col) * 2))]![Math.min(3, Math.floor((cy - row) * 4))]!
+      const k = row * layout.cols + col
 
-        if (col < 0 || row < 0 || col >= layout.cols || row >= layout.rows) continue
-        const sub = BRAILLE[Math.min(1, Math.floor((cx - col) * 2))]![Math.min(3, Math.floor((cy - row) * 4))]!
-        const k = row * layout.cols + col
-
-        bits.set(k, (bits.get(k) ?? 0) | sub)
-      }
+      bits.set(k, (bits.get(k) ?? 0) | sub)
     }
   }
   for (const [k, b] of bits) {

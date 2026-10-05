@@ -18,7 +18,7 @@ A clear description of the bug. A screenshot of the pane helps most.
 Its language and rough size (files), or a link if it is public. If the reach or the badges look wrong, name the file you edited and the file you expected to see.
 
 **Debug log**
-Run `claude --debug-file /tmp/cc.log` and paste any lines mentioning `isobar`.
+Run `claude --debug-file ~/isobar-debug.log` and paste the lines mentioning `isobar`, after removing paths, usernames and anything secret.
 
 **Expected vs actual**
 What you expected to see versus what the pane showed.

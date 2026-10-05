@@ -53,11 +53,12 @@ export const UTIL_AFTER = ['export function util(a: number) {', '  return a + 2'
  * How the fixture repo answers: `read` gives the diff and the texts a declaration reader asks for,
  * `hash` util.ts's content, and `isClean` a tree with nothing uncommitted.
  */
-export type Repo = { read?: boolean; hash?: string; isClean?: boolean }
+export type Repo = { read?: boolean; hash?: string; isClean?: boolean; untracked?: string[] }
 
 /** What git answers for the fixture repo, keyed by the subcommand and its first flags. */
 export function gitAnswer(argv: readonly string[], repo: Repo = {}): string {
-  const args = argv.slice(3).join(' ')
+  // the engine's read-only flag before every git subcommand, and the log's unquoted paths, are no part of the key
+  const args = argv.slice(3).join(' ').replace(/^-c diff\.autoRefreshIndex=false /, '').replace(/^-c core\.quotePath=false log/, 'log')
   const files = [...FACTS.lines]
   const rows = (lines: readonly string[], prefix = '') => lines.map((t, i) => `${prefix}src/util.ts\0${i + 1}\0${t}\n`).join('')
 
@@ -78,8 +79,9 @@ export function gitAnswer(argv: readonly string[], repo: Repo = {}): string {
     return Object.entries(spec).map(([p, t]) => `${p}\x001\x00${t}\n`).join('')
   }
   if (args.startsWith('log')) return FACTS.commits.map(c => `\x1e\n${c.join('\n')}\n`).join('')
-  if (args.startsWith('diff --numstat -z HEAD')) return repo.isClean === true ? '' : '5\t1\tsrc/util.ts\0'
+  if (args.startsWith('diff --numstat -z --ignore-submodules=dirty HEAD')) return repo.isClean === true ? '' : '5\t1\tsrc/util.ts\0'
   if (args.startsWith('show --numstat -z')) return 'abc1234 last commit\0\n2\t0\tsrc/app.ts\0'
+  if (args.startsWith('ls-files -z --others')) return (repo.untracked ?? []).map(p => `${p}\0`).join('')
   if (args.startsWith('hash-object')) return argv.slice(argv.indexOf('--') + 1).map(p => (p === 'src/util.ts' ? repo.hash ?? 'h1' : `h-${p}`)).join('\n') + '\n'
   if (repo.read !== true) return ''
   if (args.startsWith('-c core.quotePath=false diff -U0')) return 'diff --git a/src/util.ts b/src/util.ts\n--- a/src/util.ts\n+++ b/src/util.ts\n@@ -2 +2 @@\n-  return a + 1\n+  return a + 2\n'

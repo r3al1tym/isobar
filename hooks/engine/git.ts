@@ -14,7 +14,13 @@ const EMPTY_BLOB = new Set(['e69de29bb2d1d6434b8b29ae775ad8c2e48c5391', '473a0f4
 /** Commits touching more files than this are bulk moves and say nothing about coupling. */
 export const BULK_COMMIT = 40
 
-const git = (run: Run, root: string, ...args: string[]) => run(['git', '-C', root, ...args])
+/**
+ * Git in `root`, read-only. A porcelain `git diff` refreshes the index when a tracked file is
+ * stat-dirty, which writes `.git/index` and takes its lock; `diff.autoRefreshIndex=false` stops it.
+ */
+export const GIT_READ_ONLY = ['-c', 'diff.autoRefreshIndex=false'] as const
+
+const git = (run: Run, root: string, ...args: string[]) => run(['git', '-C', root, ...GIT_READ_ONLY, ...args])
 
 export async function repoRoot(run: Run, cwd: string): Promise<string | null> {
   const r = await run(['git', '-C', cwd, 'rev-parse', '--show-toplevel'])
@@ -30,20 +36,6 @@ export function parseCounts(stdout: string): Map<string, number> {
     const at = row.indexOf('\0')
 
     if (at > 0) out.set(row.slice(0, at), Number(row.slice(at + 1)) || 0)
-  }
-
-  return out
-}
-
-/** `path\0line\0text\n` rows of `git grep -z -n`. */
-export function parseHits(stdout: string): { path: string; text: string }[] {
-  const out: { path: string; text: string }[] = []
-
-  for (const row of stdout.split('\n')) {
-    const a = row.indexOf('\0')
-    const b = a < 0 ? -1 : row.indexOf('\0', a + 1)
-
-    if (b > 0) out.push({ path: row.slice(0, a), text: row.slice(b + 1) })
   }
 
   return out
@@ -117,7 +109,8 @@ export async function gatherFacts(run: Run, root: string, commits = 400): Promis
     git(run, root, 'grep', '-z', '-c', '-I', '-e', ''),
     git(run, root, 'ls-files', '-z', '-s'),
     importSources(run, root),
-    git(run, root, 'log', '-n', String(commits), '--no-merges', '--name-only', '--format=%x1e'),
+    // unquoted, so a path with non-ASCII bytes matches its key in `lines`
+    git(run, root, '-c', 'core.quotePath=false', 'log', '-n', String(commits), '--no-merges', '--name-only', '--format=%x1e'),
   ])
   const counted = parseCounts(counts.stdout)
   const empty = parseEmpty(index.stdout).filter(p => !counted.has(p))
@@ -151,29 +144,57 @@ export function parseNumstat(stdout: string): Change[] {
 }
 
 /**
- * The change the weather shows: uncommitted edits to tracked files plus the untracked
- * files named in `created` (what this session wrote). With none, the last commit.
+ * What a change is measured from: `head` for the uncommitted edits and `parent` for the last
+ * commit. A repository with no commits yet has neither, and its first commit has no parent:
+ * those are the empty tree, so every file in them reads as added.
  */
-export async function currentChange(run: Run, root: string, created: readonly string[] = []): Promise<{ base: Base; changes: Change[] }> {
-  const [diff, deleted, untracked] = await Promise.all([
-    git(run, root, 'diff', '--numstat', '-z', 'HEAD'),
-    git(run, root, 'diff', '--name-only', '-z', '--diff-filter=D', 'HEAD'),
+export type Refs = { head: string; parent: string; isBorn: boolean }
+
+/** HEAD and its parent, with the empty tree standing in for either where it is missing. */
+export async function refsOf(run: Run, root: string): Promise<Refs> {
+  const [head, parent] = await Promise.all([git(run, root, 'rev-parse', '--verify', '-q', 'HEAD'), git(run, root, 'rev-parse', '--verify', '-q', 'HEAD~1')])
+
+  if (head.exitCode === 0 && parent.exitCode === 0) return { head: 'HEAD', parent: 'HEAD~1', isBorn: true }
+  // the empty tree's id, in SHA-1 or SHA-256 as the repository names objects; hashed, never stored
+  const empty = (await git(run, root, 'hash-object', '-t', 'tree', '/dev/null')).stdout.trim()
+
+  return { head: head.exitCode === 0 ? 'HEAD' : empty, parent: empty, isBorn: head.exitCode === 0 }
+}
+
+/**
+ * The change the weather shows: uncommitted edits to tracked files plus the untracked files
+ * this session made, against `refs.head`. An untracked file counts when `created` names it (what
+ * the session's Write tool wrote) or when `before` (the untracked files when the session first
+ * looked) lacks it. With none, the last commit; with no commit either, nothing.
+ */
+export async function currentChange(
+  run: Run,
+  root: string,
+  created: readonly string[] = [],
+  { refs = { head: 'HEAD', parent: 'HEAD~1', isBorn: true }, before }: { refs?: Refs; before?: ReadonlySet<string> } = {},
+): Promise<{ base: Base; changes: Change[]; untracked: string[] }> {
+  const [diff, deleted, listed] = await Promise.all([
+    // a submodule with local edits but an unmoved pointer is no change of this repository's
+    git(run, root, 'diff', '--numstat', '-z', '--ignore-submodules=dirty', refs.head),
+    git(run, root, 'diff', '--name-only', '-z', '--diff-filter=D', refs.head),
     git(run, root, 'ls-files', '-z', '--others', '--exclude-standard'),
   ])
   const gone = new Set(deleted.stdout.split('\0').filter(Boolean))
   const changes = parseNumstat(diff.stdout).map(c => ({ ...c, isDeleted: gone.has(c.path) }))
   const wanted = new Set(created)
-  const fresh = untracked.stdout.split('\0').filter(p => p !== '' && wanted.has(p))
+  const untracked = listed.stdout.split('\0').filter(p => p !== '')
+  const fresh = untracked.filter(p => wanted.has(p) || (before !== undefined && !before.has(p)))
 
   if (fresh.length > 0) {
     const counted = parseCounts((await git(run, root, 'grep', '-z', '-c', '-I', '--untracked', '-e', '', '--', ...fresh)).stdout)
 
     for (const path of fresh) changes.push({ path, added: counted.get(path) ?? 0, deleted: 0, isNew: true, isDeleted: false })
   }
-  if (changes.length > 0) return { base: { kind: 'uncommitted', label: 'uncommitted' }, changes }
+  if (changes.length > 0) return { base: { kind: 'uncommitted', label: 'uncommitted' }, changes, untracked }
+  if (!refs.isBorn) return { base: { kind: 'none', label: 'no commits yet' }, changes: [], untracked }
 
   const last = await git(run, root, 'show', '--numstat', '-z', '--format=%h %s', 'HEAD')
   const subject = last.stdout.split(/[\0\n]/)[0] ?? ''
 
-  return { base: { kind: 'commit', label: subject.trim() }, changes: parseNumstat(last.stdout) }
+  return { base: { kind: 'commit', label: subject.trim() }, changes: parseNumstat(last.stdout), untracked }
 }

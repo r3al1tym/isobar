@@ -15,6 +15,8 @@ export type Layout = {
   cells: CellBox[]
   /** file → its point in half-block pixels (x in columns, y in half rows) */
   points: Map<string, { x: number; y: number }>
+  /** true when some band or cell cannot have a row and a column of its own at this size */
+  isCramped: boolean
 }
 
 const MIN_BAND_ROWS = 4
@@ -50,8 +52,8 @@ function halves(list: readonly Region[]): [Region[], Region[]] {
   return [list.slice(0, cut), list.slice(cut)]
 }
 
-/** Lays one strip of cells across `w` columns at row `y`, one hairline column between neighbours. */
-function strip(list: readonly Region[], x: number, y: number, w: number, h: number, out: CellBox[]) {
+/** Lays one strip of cells across `w` columns at row `y`, one hairline column between neighbours; false when a cell gets no column. */
+function strip(list: readonly Region[], x: number, y: number, w: number, h: number, out: CellBox[]): boolean {
   const widths = apportion(list.map(r => r.weight), w - (list.length - 1), 1)
   let at = x
 
@@ -59,18 +61,27 @@ function strip(list: readonly Region[], x: number, y: number, w: number, h: numb
     out.push({ region, rect: { x: at, y, w: widths[i]!, h } })
     at += widths[i]! + 1
   })
+  return list.length * 2 - 1 <= w
 }
 
-/** The basemap laid into `cols` × `rows` cells (hairlines included). Same input, same picture. */
+/**
+ * The basemap laid into `cols` × `rows` cells (hairlines included). Same input, same picture.
+ * A band's minimum height shrinks to what the rows allow, so every band keeps a place; where
+ * even one row a band or one column a cell will not fit, the layout says it is cramped.
+ */
 export function layoutOf(map: Basemap, files: readonly string[], lines: ReadonlyMap<string, number>, cols: number, rows: number): Layout {
   const bandsOf = map.layers.map(l => ({ layer: l, regions: map.regions.filter(r => r.layer === l.id) })).filter(b => b.regions.length > 0)
+  const free = rows - (bandsOf.length - 1)
+  const least = Math.floor(free / Math.max(1, bandsOf.length))
+  const min = Math.max(1, Math.min(MIN_BAND_ROWS, least))
   const heights = apportion(
     bandsOf.map(b => b.regions.reduce((s, r) => s + r.weight, 0)),
-    rows - (bandsOf.length - 1),
-    MIN_BAND_ROWS,
+    free,
+    min,
   )
   const bands: BandBox[] = []
   const cells: CellBox[] = []
+  let isCramped = least < 1
   let y = 0
 
   bandsOf.forEach((b, i) => {
@@ -78,18 +89,18 @@ export function layoutOf(map: Basemap, files: readonly string[], lines: Readonly
     const fits = b.regions.length * MIN_CELL_COLS + (b.regions.length - 1) <= cols
 
     bands.push({ layer: b.layer.id, name: b.layer.name, blurb: b.layer.blurb, y, h })
-    if (fits || b.regions.length < 2 || h < 2 * MIN_BAND_ROWS + 1) strip(b.regions, 0, y, cols, h, cells)
+    if (fits || b.regions.length < 2 || h < 2 * min + 1) isCramped = !strip(b.regions, 0, y, cols, h, cells) || isCramped
     else {
       const [top, bottom] = halves(b.regions)
-      const [h1, h2] = apportion([top.reduce((s, r) => s + r.weight, 0), bottom.reduce((s, r) => s + r.weight, 0)], h - 1, MIN_BAND_ROWS)
+      const [h1, h2] = apportion([top.reduce((s, r) => s + r.weight, 0), bottom.reduce((s, r) => s + r.weight, 0)], h - 1, min)
 
-      strip(top, 0, y, cols, h1!, cells)
-      strip(bottom, 0, y + h1! + 1, cols, h2!, cells)
+      isCramped = !strip(top, 0, y, cols, h1!, cells) || isCramped
+      isCramped = !strip(bottom, 0, y + h1! + 1, cols, h2!, cells) || isCramped
     }
     y += h + 1
   })
 
-  return { cols, rows, bands, cells, points: pointsOf(map, cells, files, lines) }
+  return { cols, rows, bands, cells, points: pointsOf(map, cells, files, lines), isCramped }
 }
 
 /**

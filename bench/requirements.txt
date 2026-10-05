@@ -1,7 +1,11 @@
+# the Python ground truths: grimp for imports.mts, jedi (and parso, its parser) for uses.mts
 grimp==3.17
+jedi==0.20.0
+parso==0.8.7
 # grimp locates flask.sansio by importing flask, so flask needs its own dependencies
-werkzeug
-jinja2
-itsdangerous
-click
-blinker
+Werkzeug==3.1.9
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+itsdangerous==2.2.0
+click==8.5.0
+blinker==1.9.0

@@ -3,17 +3,38 @@ import type { Change, Run } from './types'
 /** What the session has seen of one repository: each changed file's last content, and the turn that wrote it. */
 export type Ledger = { hashes: Map<string, string>; turns: Map<string, number> }
 
-/** Each changed file's content hash, read-only (`git hash-object` without `-w`); a deleted file hashes as `deleted`. */
+/** The hash of a changed path git cannot hash: a submodule, a symlink to a folder or to nothing, a file gone since the diff. */
+export const UNHASHABLE = 'unhashable'
+
+/**
+ * Each changed file's content hash, read-only (`git hash-object` without `-w`); a deleted file
+ * hashes as `deleted`, and a path git cannot hash as UNHASHABLE.
+ */
 export async function hashesOf(run: Run, root: string, changes: readonly Change[]): Promise<Map<string, string>> {
   const present = changes.filter(c => !c.isDeleted).map(c => c.path)
   const out = new Map(changes.filter(c => c.isDeleted).map(c => [c.path, 'deleted']))
+  const hash = (paths: readonly string[]) => run(['git', '-C', root, 'hash-object', '--', ...paths])
 
   if (present.length === 0) return out
-  const r = await run(['git', '-C', root, 'hash-object', '--', ...present])
+  const r = await hash(present)
   const hashes = r.stdout.split('\n').filter(Boolean)
 
-  // one hash a line, in order; a file gone since the diff was read fails the call and keeps no hashes
-  if (r.exitCode === 0 && hashes.length === present.length) present.forEach((p, i) => out.set(p, hashes[i]!))
+  // one hash a line, in order
+  if (r.exitCode === 0 && hashes.length === present.length) {
+    present.forEach((p, i) => out.set(p, hashes[i]!))
+    return out
+  }
+  // one path git cannot hash fails the whole call: hashed one by one, it costs only its own hash
+  for (let i = 0; i < present.length; i += 8) {
+    const batch = present.slice(i, i + 8)
+    const each = await Promise.all(batch.map(p => hash([p])))
+
+    batch.forEach((p, k) => {
+      const h = each[k]!.stdout.trim()
+
+      out.set(p, each[k]!.exitCode === 0 && h !== '' ? h : UNHASHABLE)
+    })
+  }
   return out
 }
 

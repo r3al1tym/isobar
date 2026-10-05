@@ -9,13 +9,23 @@
     "type": "git",
     "url": "https://github.com/r3al1tym/isobar.git"
   },
+  "packageManager": "pnpm@10.32.1",
+  "engines": {
+    "node": ">=20.11"
+  },
   "scripts": {
     "preview": "tsx scripts/preview.ts",
-    "validate": "claude plugin validate .",
+    "typecheck": "tsc -p .",
+    "validate": "claude plugin validate --strict .",
     "test": "claude plugin test ."
   },
   "devDependencies": {
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
