@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for looking at isobar. It is a small Claude Code mod with one job: show what a session changed and where it reaches, as a picture you read at a glance. Contributions that keep the pane quiet and the numbers honest are the easiest to accept.
+Thanks for looking at isobar. It is a small [Claude Code mod](https://code.claude.com/docs/en/plugins/mods/overview) with one job: show what a session changed and where it reaches, as a picture you read at a glance. Contributions that keep the pane quiet and the numbers honest are the easiest to accept.
 
 ## Ground rules
 
@@ -24,7 +24,7 @@ claude plugin uninstall isobar@isobar   # only if installed from the marketplace
 ln -s "$PWD" ~/.claude/skills/isobar
 ```
 
-Every interactive Claude Code session now loads your clone as `isobar@skills-dir` and reloads it when you save a file; `claude plugin list` should show `isobar@skills-dir` with `Status: ✔ loaded`. The engine lays the hooks API's TypeScript declarations in `.claude-plugin/types/` when it loads the mod, and `tsconfig.json` includes them, so `pnpm typecheck` (`tsc -p .`) types the mod once an interactive session has loaded it (start `claude --plugin-dir .` the first time, then quit). `pnpm test`, `pnpm validate` and `claude plugin list` do not lay the declarations.
+Every interactive Claude Code session now loads your clone as `isobar@skills-dir` and reloads it when you save a file; `claude plugin list` should show `isobar@skills-dir` with `Status: ✔ loaded`. The [mods reference](https://code.claude.com/docs/en/plugins/mods/reference) documents the hooks API, and the engine lays its TypeScript declarations in `.claude-plugin/types/` when it loads the mod, and `tsconfig.json` includes them, so `pnpm typecheck` (`tsc -p .`) types the mod once an interactive session has loaded it (start `claude --plugin-dir .` the first time, then quit). `pnpm test`, `pnpm validate` and `claude plugin list` do not lay the declarations.
 
 ```bash
 pnpm typecheck   # tsc -p .: the mod, the tests and the scripts, strict

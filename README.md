@@ -2,12 +2,12 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![version](https://img.shields.io/badge/version-0.3.0-informational)](CHANGELOG.md)
-![Claude Code mod](https://img.shields.io/badge/Claude%20Code-mod-d97757.svg)
+[![Claude Code mod](https://img.shields.io/badge/Claude%20Code-mod-d97757.svg)](https://code.claude.com/docs/en/plugins/mods/overview)
 [![CI](https://github.com/r3al1tym/isobar/actions/workflows/ci.yml/badge.svg)](https://github.com/r3al1tym/isobar/actions/workflows/ci.yml)
 
 > **A weather map for every change your agent makes, from a broad refactor to a one-line fix. See where it landed, what it did there and what else it reaches, on a map of your repo that stays the same from session to session.**
 
-isobar is a [Claude Code](https://claude.com/claude-code) mod (a plugin built on Claude Code's early-access function hooks, which let it draw its own pane) that docks a pane beside the conversation. Read it like a weather radar: a red storm on the code that changed, a few words under each changed region on what the change did there, and green rain on the code that uses it. You see the shape of a change before you read its diff, and a part you did not expect it to reach stands out at once. Read the diff for the lines; read the pane for where they landed and what they touch.
+isobar is a [Claude Code mod](https://code.claude.com/docs/en/plugins/mods/overview) (a plugin built on Claude Code's early-access function hooks, which let it draw its own pane) that docks a pane beside the conversation. Read it like a weather radar: a red storm on the code that changed, a few words under each changed region on what the change did there, and green rain on the code that uses it. You see the shape of a change before you read its diff, and a part you did not expect it to reach stands out at once. Read the diff for the lines; read the pane for where they landed and what they touch.
 
 The change is everything uncommitted against HEAD, your own edits included, plus files created during the session; on a clean tree, the last commit.
 

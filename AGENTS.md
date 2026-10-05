@@ -2,7 +2,7 @@
 
 This file is for an AI coding agent that a person asked to install, check or explain isobar. For a default install, the fast path below is enough; otherwise work through it in order. Each command says what it should print. Sections 1 and 4 only read state; section 4's optional scratch repository goes in a new temporary folder. Sections 2, 3, 8 and 9 change the person's Claude Code setup, so run them once the person has asked for that. To change isobar's own code, read [CONTRIBUTING.md](CONTRIBUTING.md) instead (section 12).
 
-isobar 0.3.0 is a Claude Code mod: a plugin of function hooks. In an interactive Claude Code session it docks a pane that draws the uncommitted change as weather over a fixed map of the repository. A red storm sits on the edited files, a 2 to 4 word caption under each changed region says what the change did there, and green rain falls on the files that use what changed.
+isobar 0.3.0 is a [Claude Code mod](https://code.claude.com/docs/en/plugins/mods/overview): a plugin of function hooks ([reference](https://code.claude.com/docs/en/plugins/mods/reference)). In an interactive Claude Code session it docks a pane that draws the uncommitted change as weather over a fixed map of the repository. A red storm sits on the edited files, a 2 to 4 word caption under each changed region says what the change did there, and green rain falls on the files that use what changed.
 
 ## Fast path
 
