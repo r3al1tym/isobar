@@ -1,6 +1,6 @@
 {
   "name": "isobar",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "isobar, a Claude Code mod: a weather map for the session's change, drawn over a fixed map of the codebase, to read a complex change at a glance. A red storm sits on what Claude edited, each changed region is captioned with what the change did there, green rain falls on the code that uses what changed, the latest turn shows brightest, and an optional scope check flags edits nobody asked for.",
   "author": {
     "name": "r3al1tym",

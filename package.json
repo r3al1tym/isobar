@@ -1,6 +1,6 @@
 {
   "name": "isobar",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "A Claude Code mod that draws the session's change as weather over a fixed map of the codebase.",

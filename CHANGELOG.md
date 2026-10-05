@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-10-05
+
+A weather map for every change: the change storms red, its reach rains green, and each changed region says in a few words what the change did there.
+
 ### Added
 - **The gist** (`gist`, on by default). Once a turn that changes files ends, `smallModel` reads each changed region's diff and captions what the change does there in a few words, under the region's name. It never sees your requests, so the caption is the diff's own account.
 
