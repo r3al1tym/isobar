@@ -58,11 +58,19 @@ The first preview of a repository draws its basemap with `claude -p --model opus
 Unit tests cover the engine and the pane's contract; the picture needs a real terminal. tmux drives one:
 
 ```bash
+# a scratch config dir, so /focus, /tui and /config in the test session stay out of your own ~/.claude
+cfg=$(mktemp -d)
+cp ~/.claude.json "$cfg/"
+cp ~/.claude/.credentials.json "$cfg/" 2>/dev/null
+jq '{env, model, tui, viewMode} | with_entries(select(.value != null))' ~/.claude/settings.json > "$cfg/settings.json"
 tmux new-session -d -s iso -x 230 -y 62 -e COLORTERM=truecolor -c ../some-repo \
-  "env -u TMUX -u TMUX_PANE TERM=xterm-256color claude --plugin-dir $PWD"
+  "env -u TMUX -u TMUX_PANE CLAUDE_CONFIG_DIR=$cfg TERM=xterm-256color claude --plugin-dir $PWD"
 # ask Claude for an edit; the pane docks beside the transcript at 144 columns or wider
 python3 scripts/capture.py iso out/live.png
+tmux kill-session -t iso; rm -r "$cfg"
 ```
+
+The test session gets its own config directory because `/focus`, `/tui` and `/config` write global state, and a test that toggles one would change every Claude Code session you have open. The copies carry your login and model settings. On macOS the login lives in the keychain under a name tied to the config dir, so run `/login` once in the test session.
 
 Claude Code paints 256 colours when it sees tmux, so the recipe hides tmux from it to paint 24-bit colour as a desktop terminal does. Drop `env -u TMUX -u TMUX_PANE` to check the 256-colour inks, and read the colours it sends with `tmux capture-pane -e -p | grep -o '48;5;[0-9]*'`.
 
